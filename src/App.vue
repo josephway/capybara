@@ -31,38 +31,30 @@ function handleRewardEarned(reward, isCompleted) {
   }
 }
 
-// 根据当前视图返回对应的组件
-const currentComponent = computed(() => {
-  switch (currentView.value) {
-    case 'honor':
-      return CapybaraGrid;
-    case 'earn':
-      return EarnCapybara;
-    case 'task-editor':
-      return TaskEditor;
-    case 'spend':
-      return SpendCapybara;
-    case 'reward-editor':
-      return RewardEditor;
-    default:
-      return CapybaraGrid;
-  }
-});
+// 处理视图切换
+function handleViewChange(view) {
+  currentView.value = view;
+}
 </script>
 
 <template>
   <div class="app">
-    <Sidebar :currentView="currentView" @change-view="currentView = $event" />
-    <div class="main-content">
-      <div class="header">
-        <h1>Joanne的卡皮巴拉奖励系统</h1>
-      </div>
+    <Sidebar 
+      :currentView="currentView"
+      @update:currentView="handleViewChange"
+    />
+    <main class="main-content">
       <component 
-        :is="currentComponent" 
-        v-model:capybaras="capybaras"
+        :is="currentView === 'honor' ? CapybaraGrid :
+             currentView === 'earn' ? EarnCapybara :
+             currentView === 'spend' ? SpendCapybara :
+             currentView === 'task-editor' ? TaskEditor :
+             RewardEditor"
+        :capybaras="capybaras"
+        @update:capybaras="newValue => capybaras = newValue"
         @reward-earned="handleRewardEarned"
       />
-    </div>
+    </main>
   </div>
 </template>
 
@@ -122,5 +114,52 @@ body {
   10% { opacity: 1; }
   90% { opacity: 1; }
   100% { opacity: 0; }
+}
+</style>
+
+<style scoped>
+.login-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.login-box {
+  background: white;
+  padding: 2rem;
+  border-radius: 12px;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+  text-align: center;
+}
+
+.password-input {
+  display: block;
+  width: 100%;
+  padding: 0.5rem;
+  margin: 1rem 0;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  font-size: 1rem;
+}
+
+.login-btn {
+  background: #2196F3;
+  color: white;
+  border: none;
+  padding: 0.5rem 2rem;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 1rem;
+}
+
+.login-btn:hover {
+  background: #1976D2;
 }
 </style>

@@ -37,6 +37,16 @@ function addTask() {
     repeat: newTask.value.repeat
   };
 
+  // 检查任务数量是否超过限制
+  if (tasks.value.length >= 5000) {
+    // 按日期排序，删除最老的任务
+    tasks.value.sort((a, b) => new Date(a.date) - new Date(b.date));
+    // 计算需要删除的数量
+    const deleteCount = tasks.value.length - 4999; // 确保添加新任务后总数为5000
+    tasks.value.splice(0, deleteCount);
+    showMessage(`已自动清理 ${deleteCount} 条最早的任务记录`);
+  }
+
   if (newTask.value.repeat === 'daily') {
     // 添加未来30天的每日任务
     for (let i = 0; i < 30; i++) {
@@ -89,6 +99,117 @@ function showMessage(msg) {
     message.value = '';
   }, 2000);
 }
+
+function cleanupOldTasks() {
+  // 获取30天前的日期
+  const thirtyDaysAgo = new Date();
+  thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+  
+  // 过滤掉30天前的已完成任务
+  const oldTasksCount = tasks.value.length;
+  tasks.value = tasks.value.filter(task => {
+    if (task.completed) {
+      const taskDate = new Date(task.date);
+      return taskDate >= thirtyDaysAgo;
+    }
+    return true;
+  });
+  
+  const removedCount = oldTasksCount - tasks.value.length;
+  if (removedCount > 0) {
+    showMessage(`已自动清理 ${removedCount} 条30天前的已完成任务`);
+  }
+}
+
+// 每天执行一次清理
+const CLEANUP_INTERVAL = 24 * 60 * 60 * 1000; // 24小时
+setInterval(cleanupOldTasks, CLEANUP_INTERVAL);
+
+// 组件挂载时也执行一次清理
+cleanupOldTasks();
+
+function checkAndAddRecurringTasks() {
+  const today = new Date();
+  const thirtyDaysFromNow = new Date();
+  thirtyDaysFromNow.setDate(today.getDate() + 30);
+  
+  // 获取所有重复任务的模板
+  const recurringTaskTemplates = tasks.value.filter(task => 
+    task.repeat && ['daily', 'weekly'].includes(task.repeat)
+  );
+  
+  // 按模板创建新任务
+  recurringTaskTemplates.forEach(template => {
+    // 找到该模板的最后一个任务日期
+    const templateTasks = tasks.value.filter(task => 
+      task.title === template.title && 
+      task.repeat === template.repeat
+    );
+    
+    const lastTaskDate = new Date(Math.max(...templateTasks.map(t => new Date(t.date))));
+    
+    // 如果最后一个任务日期距今不到15天，就添加新任务
+    if ((thirtyDaysFromNow - lastTaskDate) > 15 * 24 * 60 * 60 * 1000) {
+      const startDate = new Date(lastTaskDate);
+      startDate.setDate(lastTaskDate.getDate() + 1);
+      
+      if (template.repeat === 'daily') {
+        // 添加未来30天的每日任务
+        for (let i = 0; i < 30; i++) {
+          const date = new Date(startDate);
+          date.setDate(date.getDate() + i);
+          
+          // 检查该日期是否已存在相同任务
+          const existingTask = tasks.value.find(t => 
+            t.date === date.toISOString().split('T')[0] && 
+            t.title === template.title
+          );
+          
+          if (!existingTask) {
+            tasks.value.push({
+              id: Date.now() + i,
+              title: template.title,
+              date: date.toISOString().split('T')[0],
+              reward: { ...template.reward },
+              completed: false,
+              repeat: template.repeat
+            });
+          }
+        }
+      } else if (template.repeat === 'weekly') {
+        // 添加未来4周的每周任务
+        for (let i = 0; i < 4; i++) {
+          const date = new Date(startDate);
+          date.setDate(date.getDate() + i * 7);
+          
+          // 检查该日期是否已存在相同任务
+          const existingTask = tasks.value.find(t => 
+            t.date === date.toISOString().split('T')[0] && 
+            t.title === template.title
+          );
+          
+          if (!existingTask) {
+            tasks.value.push({
+              id: Date.now() + i,
+              title: template.title,
+              date: date.toISOString().split('T')[0],
+              reward: { ...template.reward },
+              completed: false,
+              repeat: template.repeat
+            });
+          }
+        }
+      }
+    }
+  });
+}
+
+// 设置定时器，每天检查一次
+const DAILY_CHECK_INTERVAL = 24 * 60 * 60 * 1000; // 24小时
+setInterval(checkAndAddRecurringTasks, DAILY_CHECK_INTERVAL);
+
+// 在组件挂载时也执行一次检查
+checkAndAddRecurringTasks();
 </script>
 
 <template>

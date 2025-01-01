@@ -1,118 +1,115 @@
 <template>
-  <div class="sidebar">
+  <aside class="sidebar">
     <div class="logo">
-      <img src="/capybara.png" alt="Joanne&Capybara Logo">
+      <img src="/capybara.png" alt="Capybara Logo">
     </div>
-    <div class="nav-links">
-      <a 
-        href="#" 
-        @click.prevent="$emit('change-view', 'honor')"
+    <nav>
+      <button 
+        @click="switchView('honor')"
         :class="{ active: currentView === 'honor' }"
       >
-        <span class="nav-icon">🏆</span>
         荣誉墙
-      </a>
-      <a 
-        href="#" 
-        @click.prevent="$emit('change-view', 'earn')"
+      </button>
+      <button 
+        @click="switchView('earn')"
         :class="{ active: currentView === 'earn' }"
       >
-        <span class="nav-icon">📝</span>
-        完成任务
-      </a>
-      <a 
-        href="#" 
-        @click.prevent="$emit('change-view', 'task-editor')"
-        :class="{ active: currentView === 'task-editor' }"
-      >
-        <span class="nav-icon">✏️</span>
-        编辑任务
-      </a>
-      <a 
-        href="#" 
-        @click.prevent="$emit('change-view', 'spend')"
+        赚取卡皮巴拉
+      </button>
+      <button 
+        @click="switchView('spend')"
         :class="{ active: currentView === 'spend' }"
       >
-        <span class="nav-icon">🎁</span>
-        兑换奖励
-      </a>
-      <a 
-        href="#" 
-        @click.prevent="$emit('change-view', 'reward-editor')"
+        使用卡皮巴拉
+      </button>
+      <button 
+        @click="switchView('task-editor')"
+        :class="{ active: currentView === 'task-editor' }"
+      >
+        任务编辑器
+      </button>
+      <button 
+        @click="switchView('reward-editor')"
         :class="{ active: currentView === 'reward-editor' }"
       >
-        <span class="nav-icon">⚙️</span>
-        编辑奖励
-      </a>
-    </div>
-  </div>
+        奖励编辑器
+      </button>
+    </nav>
+  </aside>
 </template>
 
 <script setup>
-defineProps({
-  currentView: String
+const props = defineProps({
+  currentView: {
+    type: String,
+    required: true
+  }
 });
+
+const emit = defineEmits(['update:currentView']);
+
+function switchView(view) {
+  emit('update:currentView', view);
+}
 </script>
 
 <style scoped>
 .sidebar {
-  width: 280px;
+  width: 200px;
   background: white;
-  border-right: 1px solid #e0e0e0;
-  height: 100vh;
+  min-height: 100vh;
+  padding: 20px;
+  box-shadow: 2px 0 5px rgba(0, 0, 0, 0.1);
   position: sticky;
   top: 0;
   display: flex;
   flex-direction: column;
 }
 
-h1 {
-  padding: 20px;
-  margin: 0;
-  text-align: center;
-  border-bottom: 1px solid #e0e0e0;
-}
-
-.nav-links {
-  display: flex;
-  flex-direction: column;
-  padding: 20px 0;
-}
-
-.nav-links a {
-  padding: 12px 20px;
-  text-decoration: none;
-  color: #333;
-  display: flex;
-  align-items: center;
-  transition: background-color 0.2s;
-}
-
-.nav-links a:hover {
-  background-color: #f5f5f5;
-}
-
-.nav-links a.active {
-  background-color: #e3f2fd;
-  color: #1976d2;
-}
-
-.nav-icon {
-  margin-right: 12px;
-  font-size: 1.2em;
-}
-
 .logo {
-  padding: 20px;
-  margin: 0;
   text-align: center;
-  border-bottom: 1px solid #e0e0e0;
+  margin-bottom: 30px;
 }
 
 .logo img {
-  width: 150px;
-  height: 150px;
+  width: 120px;
+  height: 120px;
   object-fit: cover;
   border-radius: 50%;
+  background: white;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+nav {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+button {
+  padding: 12px;
+  border: none;
+  border-radius: 8px;
+  background: #f5f5f5;
+  cursor: pointer;
+  font-size: 16px;
+  transition: all 0.3s ease;
+  text-align: left;
+  color: #666;
+}
+
+button:hover {
+  background: #e0e0e0;
+  transform: translateX(5px);
+}
+
+button.active {
+  background: #ff6b6b;
+  color: white;
+  font-weight: bold;
+}
+
+button.active:hover {
+  background: #ff5252;
 }
 </style>
