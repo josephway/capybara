@@ -5,34 +5,40 @@
     </div>
     <nav>
       <button 
-        @click="switchView('honor')"
+        @click="$emit('change', 'honor')"
         :class="{ active: currentView === 'honor' }"
       >
         荣誉墙
       </button>
       <button 
-        @click="switchView('earn')"
+        @click="$emit('change', 'earn')"
         :class="{ active: currentView === 'earn' }"
       >
         赚取卡皮巴拉
       </button>
       <button 
-        @click="switchView('spend')"
+        @click="$emit('change', 'spend')"
         :class="{ active: currentView === 'spend' }"
       >
         使用卡皮巴拉
       </button>
       <button 
-        @click="switchView('task-editor')"
-        :class="{ active: currentView === 'task-editor' }"
+        @click="$emit('change', 'tasks')"
+        :class="{ active: currentView === 'tasks' }"
       >
         任务编辑器
       </button>
       <button 
-        @click="switchView('reward-editor')"
-        :class="{ active: currentView === 'reward-editor' }"
+        @click="$emit('change', 'rewards')"
+        :class="{ active: currentView === 'rewards' }"
       >
         奖励编辑器
+      </button>
+      <button 
+        @click="$emit('change', 'settings')"
+        :class="{ active: currentView === 'settings' }"
+      >
+        设置
       </button>
     </nav>
   </aside>
@@ -46,7 +52,7 @@ const props = defineProps({
   }
 });
 
-const emit = defineEmits(['update:currentView']);
+const emit = defineEmits(['change']);
 
 function switchView(view) {
   emit('update:currentView', view);

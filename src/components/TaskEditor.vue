@@ -1,27 +1,9 @@
 <script setup>
-import { ref, onMounted, computed } from 'vue';
-import { db } from '../db';
+import { ref, computed, onMounted } from 'vue';
+import { api } from '../api/client';
 
-// 从数据库加载任务
 const tasks = ref([]);
-
-// 加载任务数据
-async function loadTasks() {
-  try {
-    const savedTasks = await db.tasks.toArray();
-    tasks.value = savedTasks;
-  } catch (error) {
-    console.error('Failed to load tasks:', error);
-    tasks.value = [];
-  }
-}
-
-// 组件挂载时加载数据
-onMounted(() => {
-  loadTasks();
-});
-
-// 新任务表单
+const message = ref('');
 const newTask = ref({
   title: '',
   description: '',
@@ -34,99 +16,129 @@ const newTask = ref({
   completed: false
 });
 
-// 添加任务
-async function addTask() {
-  if (!newTask.value.title) {
-    showMessage('请输入任务标题');
-    return;
-  }
-  
-  const baseTask = {
-    title: newTask.value.title,
-    description: newTask.value.description || '',
-    reward: { ...newTask.value.reward },
-    completed: false,
-    repeat: newTask.value.repeat
+// 添加折叠状态管理
+const expandedTypes = ref({
+  bronze: true,
+  silver: true,
+  gold: true,
+  diamond: true
+});
+
+// 按类型分组的任务
+const tasksByType = computed(() => {
+  const groups = {
+    diamond: [],
+    gold: [],
+    silver: [],
+    bronze: []
   };
+  
+  // 先处理系列任务
+  const seriesTasks = new Map();
+  tasks.value.forEach(task => {
+    if (task.repeat !== 'none') {
+      const key = `${task.title}-${task.repeat}-${task.reward.type}-${task.reward.amount}`;
+      if (!seriesTasks.has(key)) {
+        seriesTasks.set(key, { ...task, isSeriesTask: true });
+      }
+    }
+  });
 
+  // 将系列任务添加到对应类型组
+  seriesTasks.forEach(task => {
+    if (groups[task.reward.type]) {
+      groups[task.reward.type].push(task);
+    }
+  });
+
+  // 添加非重复任务
+  tasks.value.forEach(task => {
+    if (task.repeat === 'none' && groups[task.reward.type]) {
+      groups[task.reward.type].push(task);
+    }
+  });
+  
+  return groups;
+});
+
+// 切换折叠状态
+function toggleExpand(type) {
+  expandedTypes.value[type] = !expandedTypes.value[type];
+}
+
+// 加载任务
+async function loadTasks() {
   try {
-    // 检查任务数量
-    const taskCount = await db.tasks.count();
-    if (taskCount >= 5000) {
-      const oldTasks = await db.tasks
-        .orderBy('date')
-        .limit(taskCount - 4999)
-        .toArray();
-      
-      await db.tasks.bulkDelete(oldTasks.map(t => t.id));
-      showMessage(`已自动清理 ${oldTasks.length} 条最早的任务记录`);
-    }
-
-    let newTasks = [];
-    if (newTask.value.repeat === 'daily') {
-      // 添加未来30天的每日任务
-      for (let i = 0; i < 30; i++) {
-        const date = new Date(newTask.value.date);
-        date.setDate(date.getDate() + i);
-        newTasks.push({
-          ...baseTask,
-          date: date.toISOString().split('T')[0]
-        });
-      }
-    } else if (newTask.value.repeat === 'weekly') {
-      // 添加未来4周的每周任务
-      for (let i = 0; i < 4; i++) {
-        const date = new Date(newTask.value.date);
-        date.setDate(date.getDate() + i * 7);
-        newTasks.push({
-          ...baseTask,
-          date: date.toISOString().split('T')[0]
-        });
-      }
-    } else {
-      // 单次任务
-      newTasks.push({
-        ...baseTask,
-        date: newTask.value.date
-      });
-    }
-
-    // 批量添加到数据库，让数据库自动生成ID
-    const ids = await db.tasks.bulkAdd(newTasks, { allKeys: true });
-    newTasks = newTasks.map((task, index) => ({
-      ...task,
-      id: ids[index]
-    }));
-    
-    tasks.value = [...tasks.value, ...newTasks];
-    
-    // 重置表单
-    newTask.value = {
-      title: '',
-      description: '',
-      date: new Date().toISOString().split('T')[0],
-      reward: {
-        type: 'bronze',
-        amount: 1
-      },
-      repeat: 'none',
-      completed: false
-    };
-    
-    showMessage('任务添加成功');
+    console.log('Loading tasks...');  // 添加日志
+    const allTasks = await api.getTasks();
+    console.log('Loaded tasks:', allTasks);  // 添加日志
+    tasks.value = allTasks;
   } catch (error) {
-    console.error('Failed to add tasks:', error);
-    showMessage('添加任务失败，请重试');
+    console.error('Failed to load tasks:', error);
+    showMessage('加载任务失败');
   }
 }
 
-// 删除任务
-async function deleteTask(taskId) {
+// 添加任务
+async function addTask() {
+  if (!newTask.value.title) {
+    showMessage('请填写任务标题');
+    return;
+  }
+
   try {
-    await db.tasks.delete(taskId);
-    const index = tasks.value.findIndex(t => t.id === taskId);
-    if (index !== -1) {
-      tasks.value.splice(index, 1);
+    console.log('Sending task to server:', newTask.value);
+    await api.createTask(newTask.value);
+    await loadTasks();
+    resetForm();
+    showMessage('任务添加成功');
+  } catch (error) {
+    console.error('Failed to add task:', error);
+    showMessage('添加任务失败');
+  }
+}
+
+// 添加重置表单的辅助函数
+function resetForm() {
+  newTask.value = {
+    title: '',
+    description: '',
+    date: new Date().toISOString().split('T')[0],
+    reward: {
+      type: 'bronze',
+      amount: 1
+    },
+    repeat: 'none',
+    completed: false
+  };
+}
+
+// 删除任务
+async function deleteTask(task) {
+  try {
+    if (task.repeat !== 'none') {
+      // 删除系列任务
+      const seriesTasks = tasks.value.filter(t => 
+        t.title === task.title && 
+        t.repeat === task.repeat &&
+        t.reward.type === task.reward.type &&
+        t.reward.amount === task.reward.amount
+      );
+      
+      // 并行删除所有相关任务
+      await Promise.all(seriesTasks.map(t => api.deleteTask(t.id)));
+      
+      // 从本地状态中移除这些任务
+      tasks.value = tasks.value.filter(t => !seriesTasks.includes(t));
+      
+      showMessage('系列任务删除成功');
+    } else {
+      // 删除单个任务
+      await api.deleteTask(task.id);
+      const index = tasks.value.findIndex(t => t.id === task.id);
+      if (index !== -1) {
+        tasks.value.splice(index, 1);
+      }
       showMessage('任务删除成功');
     }
   } catch (error) {
@@ -135,309 +147,203 @@ async function deleteTask(taskId) {
   }
 }
 
-// 清理旧任务
-async function cleanupOldTasks() {
-  try {
-    const thirtyDaysAgo = new Date();
-    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-    const thirtyDaysAgoStr = thirtyDaysAgo.toISOString().split('T')[0];
-    
-    // 获取所有任务，然后在内存中过滤
-    const allTasks = await db.tasks.toArray();
-    const tasksToDelete = allTasks.filter(task => 
-      task.completed && task.date < thirtyDaysAgoStr
-    );
-
-    if (tasksToDelete.length > 0) {
-      // 批量删除过期任务
-      await db.tasks.bulkDelete(tasksToDelete.map(t => t.id));
-      
-      // 更新本地状态
-      tasks.value = tasks.value.filter(task => 
-        !tasksToDelete.find(t => t.id === task.id)
-      );
-      
-      showMessage(`已自动清理 ${tasksToDelete.length} 条30天前的已完成任务`);
-    }
-  } catch (error) {
-    console.error('Failed to cleanup old tasks:', error);
-  }
-}
-
-// 消息提示
-const message = ref('');
-function showMessage(msg) {
-  message.value = msg;
+function showMessage(text) {
+  message.value = text;
   setTimeout(() => {
     message.value = '';
-  }, 2000);
+  }, 3000);
 }
 
-// 设置定时器
-const CLEANUP_INTERVAL = 24 * 60 * 60 * 1000;
-setInterval(cleanupOldTasks, CLEANUP_INTERVAL);
-
-// 组件挂载时执行清理
-onMounted(() => {
-  cleanupOldTasks();
-});
-
-// 检查并添加重复任务
-async function checkAndAddRecurringTasks() {
-  try {
-    const today = new Date();
-    const thirtyDaysFromNow = new Date();
-    thirtyDaysFromNow.setDate(today.getDate() + 30);
-    
-    // 获取所有任务，然后在内存中过滤
-    const allTasks = await db.tasks.toArray();
-    const recurringTasks = allTasks.filter(task => 
-      task.repeat && ['daily', 'weekly'].includes(task.repeat)
-    );
-    
-    for (const template of recurringTasks) {
-      // 找到该模板的最后一个任务日期
-      const templateTasks = allTasks.filter(task => 
-        task.title === template.title && 
-        task.repeat === template.repeat
-      );
-      
-      if (templateTasks.length === 0) continue;
-
-      const lastTaskDate = new Date(Math.max(
-        ...templateTasks.map(t => new Date(t.date))
-      ));
-      
-      // 如果最后一个任务日期距今不到15天，就添加新任务
-      if ((thirtyDaysFromNow - lastTaskDate) > 15 * 24 * 60 * 60 * 1000) {
-        const startDate = new Date(lastTaskDate);
-        startDate.setDate(lastTaskDate.getDate() + 1);
-        
-        let newTasks = [];
-        
-        if (template.repeat === 'daily') {
-          // 添加未来30天的每日任务
-          for (let i = 0; i < 30; i++) {
-            const date = new Date(startDate);
-            date.setDate(date.getDate() + i);
-            const dateStr = date.toISOString().split('T')[0];
-            
-            // 检查该日期是否已存在相同任务
-            const existingTask = templateTasks.find(t => 
-              t.date === dateStr && t.title === template.title
-            );
-            
-            if (!existingTask) {
-              newTasks.push({
-                title: template.title,
-                date: dateStr,
-                reward: { ...template.reward },
-                completed: false,
-                repeat: template.repeat
-              });
-            }
-          }
-        } else if (template.repeat === 'weekly') {
-          // 添加未来4周的每周任务
-          for (let i = 0; i < 4; i++) {
-            const date = new Date(startDate);
-            date.setDate(date.getDate() + i * 7);
-            const dateStr = date.toISOString().split('T')[0];
-            
-            // 检查该日期是否已存在相同任务
-            const existingTask = templateTasks.find(t => 
-              t.date === dateStr && t.title === template.title
-            );
-            
-            if (!existingTask) {
-              newTasks.push({
-                title: template.title,
-                date: dateStr,
-                reward: { ...template.reward },
-                completed: false,
-                repeat: template.repeat
-              });
-            }
-          }
-        }
-
-        if (newTasks.length > 0) {
-          // 批量添加到数据库
-          const ids = await db.tasks.bulkAdd(newTasks, { allKeys: true });
-          newTasks = newTasks.map((task, index) => ({
-            ...task,
-            id: ids[index]
-          }));
-          tasks.value = [...tasks.value, ...newTasks];
-        }
-      }
-    }
-  } catch (error) {
-    console.error('Failed to check and add recurring tasks:', error);
+// 生成每日任务
+function generateDailyTasks(baseTask) {
+  const tasks = [];
+  const startDate = new Date(baseTask.date);
+  for (let i = 0; i < 7; i++) {
+    const date = new Date(startDate);
+    date.setDate(date.getDate() + i);
+    tasks.push({
+      ...baseTask,
+      date: date.toISOString().split('T')[0]
+    });
   }
+  return tasks;
 }
 
-// 设置定时器，每天检查一次
-const DAILY_CHECK_INTERVAL = 24 * 60 * 60 * 1000; // 24小时
-setInterval(checkAndAddRecurringTasks, DAILY_CHECK_INTERVAL);
+// 生成每周任务
+function generateWeeklyTasks(baseTask) {
+  const tasks = [];
+  const startDate = new Date(baseTask.date);
+  for (let i = 0; i < 4; i++) {
+    const date = new Date(startDate);
+    date.setDate(date.getDate() + (i * 7));
+    tasks.push({
+      ...baseTask,
+      date: date.toISOString().split('T')[0]
+    });
+  }
+  return tasks;
+}
 
-// 在组件挂载时也执行一次检查
-onMounted(() => {
-  loadTasks();
-  cleanupOldTasks();
-  checkAndAddRecurringTasks();
-});
-
-// 获取奖励类型名称
-function getRewardTypeName(type) {
+// 获取类型名称
+function getTypeName(type) {
   const names = {
-    diamond: '钻石',
-    gold: '黄金',
-    silver: '白银',
-    bronze: '青铜'
+    diamond: '钻石卡皮巴拉',
+    gold: '黄金卡皮巴拉',
+    silver: '白银卡皮巴拉',
+    bronze: '青铜卡皮巴拉'
   };
   return names[type] || type;
 }
 
-// 对任务进行分组的计算属性
-const uniqueTasks = computed(() => {
-  const taskGroups = {};
-  
-  tasks.value.forEach(task => {
-    const key = task.repeat !== 'none' 
-      ? `${task.title}-${task.repeat}-${task.reward.type}-${task.reward.amount}`
-      : task.id.toString();
-      
-    if (!taskGroups[key] || new Date(task.date) < new Date(taskGroups[key].date)) {
-      taskGroups[key] = {
-        ...task,
-        nextDate: task.repeat !== 'none' 
-          ? tasks.value
-              .filter(t => 
-                t.title === task.title && 
-                t.repeat === task.repeat &&
-                new Date(t.date) > new Date()
-              )
-              .sort((a, b) => new Date(a.date) - new Date(b.date))[0]?.date
-          : task.date
-      };
-    }
-  });
-  
-  return Object.values(taskGroups)
-    .sort((a, b) => {
-      if (a.repeat !== 'none' && b.repeat === 'none') return -1;
-      if (a.repeat === 'none' && b.repeat !== 'none') return 1;
-      return new Date(a.nextDate) - new Date(b.nextDate);
-    });
-});
+// 获取重复类型名称
+function getRepeatName(repeat) {
+  const types = {
+    none: '不重复',
+    daily: '每日重复',
+    weekly: '每周重复'
+  };
+  return types[repeat] || repeat;
+}
 
-// 删除任务或任务系列
-async function deleteTaskGroup(task) {
+async function toggleTask(task) {
   try {
-    if (task.repeat !== 'none') {
-      // 删除所有相同标题和重复类型的任务
-      const tasksToDelete = tasks.value.filter(t => 
-        t.title === task.title && t.repeat === task.repeat
-      );
-      await db.tasks.bulkDelete(tasksToDelete.map(t => t.id));
-      tasks.value = tasks.value.filter(t => 
-        !(t.title === task.title && t.repeat === task.repeat)
-      );
+    const updatedTask = {
+      ...task,
+      completed: !task.completed
+    };
+
+    await api.updateTask(task.id, updatedTask);
+    
+    // 更新任务状态时同时处理奖励
+    if (updatedTask.completed) {
+      // 完成任务时增加奖励
+      emit('reward-earned', task.reward);
     } else {
-      // 删除单个任务
-      await db.tasks.delete(task.id);
-      tasks.value = tasks.value.filter(t => t.id !== task.id);
+      // 取消完成时减少奖励
+      emit('reward-earned', {
+        type: task.reward.type,
+        amount: -task.reward.amount // 使用负数来减少奖励
+      });
     }
-    showMessage(`成功删除${task.repeat !== 'none' ? '系列' : ''}任务`);
+    
+    await loadTasks();
   } catch (error) {
-    console.error('Failed to delete task(s):', error);
-    showMessage('删除失败，请重试');
+    console.error('Failed to update task:', error);
+    showMessage('更新任务状态失败');
   }
 }
+
+onMounted(() => {
+  loadTasks();
+});
 </script>
 
 <template>
   <div class="task-editor">
-    <div class="add-task-form">
-      <h2>添加新任务</h2>
-      <div class="form-group">
-        <input 
-          type="text" 
-          v-model="newTask.title" 
-          placeholder="任务标题"
-          class="input-field"
-        >
-        <textarea 
-          v-model="newTask.description"
-          placeholder="任务描述（选填）"
-          class="input-field"
-          rows="3"
-        ></textarea>
-        <div class="date-repeat-group">
+    <div v-if="message" class="message">{{ message }}</div>
+    
+    <!-- 添加任务表单 -->
+    <form @submit.prevent="addTask" class="task-form">
+      <div class="add-task-form">
+        <h2>添加新任务</h2>
+        <div class="form-group">
           <input 
-            type="date" 
-            v-model="newTask.date"
+            type="text" 
+            v-model="newTask.title" 
+            placeholder="任务标题"
             class="input-field"
           >
-          <select v-model="newTask.repeat" class="input-field">
-            <option value="none">不重复</option>
-            <option value="daily">每日重复</option>
-            <option value="weekly">每周重复</option>
-          </select>
+          <textarea 
+            v-model="newTask.description"
+            placeholder="任务描述（选填）"
+            class="input-field"
+            rows="3"
+          ></textarea>
+          <div class="date-repeat-group">
+            <input 
+              type="date" 
+              v-model="newTask.date"
+              class="input-field"
+            >
+            <select v-model="newTask.repeat" class="input-field">
+              <option value="none">不重复</option>
+              <option value="daily">每日重复</option>
+              <option value="weekly">每周重复</option>
+            </select>
+          </div>
+          <div class="reward-group">
+            <select v-model="newTask.reward.type" class="input-field">
+              <option value="bronze">青铜卡皮巴拉</option>
+              <option value="silver">白银卡皮巴拉</option>
+              <option value="gold">黄金卡皮巴拉</option>
+              <option value="diamond">钻石卡皮巴拉</option>
+            </select>
+            <input 
+              type="number" 
+              v-model.number="newTask.reward.amount"
+              min="1"
+              class="input-field reward-amount"
+            >
+          </div>
+          <button type="submit" class="add-btn">添加任务</button>
         </div>
-        <div class="reward-group">
-          <select v-model="newTask.reward.type" class="input-field">
-            <option value="bronze">青铜卡皮巴拉</option>
-            <option value="silver">白银卡皮巴拉</option>
-            <option value="gold">黄金卡皮巴拉</option>
-            <option value="diamond">钻石卡皮巴拉</option>
-          </select>
-          <input 
-            type="number" 
-            v-model.number="newTask.reward.amount"
-            min="1"
-            class="input-field reward-amount"
-          >
-        </div>
-        <button @click="addTask" class="add-btn">添加任务</button>
       </div>
-    </div>
+    </form>
 
-    <div class="tasks-list">
-      <h2>任务列表</h2>
-      
-      <!-- 使用计算属性对任务进行分组显示 -->
-      <div v-for="task in uniqueTasks" 
-           :key="task.id" 
-           class="task-item"
-           :class="{ 
-             'recurring-task': task.repeat !== 'none',
-             'has-tooltip': task.description 
-           }"
-           :data-tooltip="task.description">
-        <div class="task-info">
-          <span class="task-title">{{ task.title }}</span>
-          <div class="task-details">
-            <span class="task-date" v-if="task.repeat === 'none'">
-              {{ task.date }}
-            </span>
-            <span class="task-repeat" v-else>
-              {{ task.repeat === 'daily' ? '每日任务' : '每周任务' }}
-              (下次: {{ task.nextDate }})
-            </span>
-            <span :class="['task-reward', task.reward.type]">
-              {{ task.reward.amount }} {{ getRewardTypeName(task.reward.type) }}
-            </span>
+    <!-- 按类型分组的任务列表 -->
+    <div class="task-list">
+      <div v-for="(tasks, type) in tasksByType" 
+           :key="type" 
+           class="tasks-section"
+           :class="type">
+        <div class="type-header" @click="toggleExpand(type)">
+          <h2>
+            {{ getTypeName(type) }}
+            <span class="task-count">({{ tasks.length }})</span>
+          </h2>
+          <span class="expand-icon">
+            {{ expandedTypes[type] ? '▼' : '▶' }}
+          </span>
+        </div>
+        
+        <div v-show="expandedTypes[type]" 
+             class="tasks-group"
+             :class="{ expanded: expandedTypes[type] }">
+          <div v-for="task in tasks" 
+               :key="task.id || task.title" 
+               class="task-item"
+               :class="{ 'series-task': task.isSeriesTask }">
+            <div class="task-content">
+              <div class="task-header">
+                <h3>{{ task.title }}</h3>
+                <button 
+                  @click="deleteTask(task)"
+                  class="delete-btn"
+                  :class="{ 'series-delete': task.isSeriesTask }"
+                >
+                  <span class="delete-icon">×</span>
+                  <span class="delete-text">
+                    {{ task.isSeriesTask ? '删除系列' : '删除' }}
+                  </span>
+                </button>
+              </div>
+              <p v-if="task.description" class="task-description">
+                {{ task.description }}
+              </p>
+              <div class="task-info">
+                <span class="task-date">日期: {{ task.date }}</span>
+                <span v-if="task.isSeriesTask" class="task-repeat">
+                  {{ getRepeatName(task.repeat) }}
+                </span>
+                <span class="task-reward" :class="task.reward.type">
+                  奖励: {{ task.reward.amount }} 个
+                </span>
+              </div>
+            </div>
           </div>
         </div>
-        <button @click="deleteTaskGroup(task)" class="delete-btn">
-          删除{{ task.repeat !== 'none' ? '系列' : '' }}
-        </button>
       </div>
     </div>
-
-    <div class="message" v-if="message">{{ message }}</div>
   </div>
 </template>
 
@@ -497,75 +403,103 @@ async function deleteTaskGroup(task) {
 }
 
 .task-item {
+  position: relative;
+  background: white;
+  border-radius: 12px;
+  padding: 20px;
+  margin-bottom: 16px;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+  transition: all 0.3s ease;
+}
+
+.series-task {
+  border-left: 4px solid #2196F3;
+}
+
+.task-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 16px;
-  border-bottom: 1px solid #eee;
-  transition: background-color 0.2s;
+  gap: 12px;
 }
 
-.task-item:hover {
-  background-color: #f8f9fa;
+.task-header h3 {
+  margin: 0;
+  flex: 1;
 }
 
-.recurring-task {
-  background-color: #f8f9fa;
-  border-left: 4px solid #2196f3;
+.task-content {
+  flex: 1;
 }
 
 .task-info {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.task-title {
-  font-size: 1.1em;
-  font-weight: 500;
-}
-
-.task-details {
   display: flex;
   gap: 16px;
   color: #666;
   font-size: 0.9em;
-}
-
-.task-date, .task-repeat {
-  color: #666;
+  margin-top: 8px;
+  flex-wrap: wrap;
+  align-items: center;
 }
 
 .task-repeat {
-  color: #2196f3;
+  color: #2196F3;
   font-weight: 500;
+  display: flex;
+  align-items: center;
+  gap: 4px;
 }
-
-.task-reward {
-  padding: 2px 8px;
-  border-radius: 4px;
-  font-size: 0.9em;
-}
-
-.task-reward.bronze { background: #fff3e0; color: #ef6c00; }
-.task-reward.silver { background: #f5f5f5; color: #757575; }
-.task-reward.gold { background: #fff8e1; color: #ffa000; }
-.task-reward.diamond { background: #e3f2fd; color: #00bcd4; }
 
 .delete-btn {
-  background: #f44336;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: #ff5252;
   color: white;
-  padding: 6px 12px;
   border: none;
-  border-radius: 4px;
+  padding: 6px 12px;
+  border-radius: 6px;
   cursor: pointer;
-  transition: all 0.2s;
+  font-size: 0.9em;
+  transition: all 0.2s ease;
+  opacity: 0.9;
+  white-space: nowrap;
 }
 
 .delete-btn:hover {
-  background: #d32f2f;
+  opacity: 1;
   transform: translateY(-1px);
+  box-shadow: 0 2px 4px rgba(244, 67, 54, 0.3);
+}
+
+.series-delete {
+  background: #f44336;
+}
+
+.delete-icon {
+  font-size: 1.2em;
+  font-weight: bold;
+}
+
+.task-description {
+  color: #666;
+  font-size: 0.9em;
+  margin: 8px 0;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.task-item {
+  animation: fadeIn 0.3s ease-out;
 }
 
 .message {
@@ -659,4 +593,66 @@ textarea.input-field {
   border-top-color: rgba(0, 0, 0, 0.9);
   pointer-events: none;
 }
+
+.tasks-section {
+  margin-bottom: 20px;
+  background: white;
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.type-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 20px;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.type-header:hover {
+  background-color: #f5f5f5;
+}
+
+.type-header h2 {
+  margin: 0;
+  font-size: 1.2em;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.task-count {
+  font-size: 0.8em;
+  color: #666;
+  font-weight: normal;
+}
+
+.expand-icon {
+  color: #666;
+  transition: transform 0.2s;
+}
+
+.tasks-group {
+  border-top: 1px solid #eee;
+  animation: slideDown 0.3s ease-out;
+}
+
+@keyframes slideDown {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* 类型特定的样式 */
+.tasks-section.diamond .type-header { border-left: 4px solid #00bcd4; }
+.tasks-section.gold .type-header { border-left: 4px solid #ffd700; }
+.tasks-section.silver .type-header { border-left: 4px solid #c0c0c0; }
+.tasks-section.bronze .type-header { border-left: 4px solid #cd7f32; }
 </style> 

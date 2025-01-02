@@ -1,293 +1,87 @@
-<script setup>
-import { ref, computed, watch, onMounted } from 'vue';
-import { db } from '../db';
-
-// 从数据库加载奖励列表
-const rewards = ref([]);
-
-// 加载奖励数据
-async function loadRewards() {
-  try {
-    const savedRewards = await db.rewards.toArray();
-    rewards.value = savedRewards;
-  } catch (error) {
-    console.error('Failed to load rewards:', error);
-    rewards.value = [];
-  }
-}
-
-// 组件挂载时加载数据
-onMounted(() => {
-  loadRewards();
-});
-
-// 默认数量映射
-const defaultAmounts = {
-  diamond: 1,
-  gold: 2,
-  silver: 3,
-  bronze: 5
-};
-
-// 新奖励表单
-const newReward = ref({
-  title: '',
-  description: '',
-  cost: {
-    type: 'diamond',
-    amount: defaultAmounts['diamond']
-  }
-});
-
-// 编辑状态管理
-const editingReward = ref(null);
-
-// 折叠状态管理
-const expandedTypes = ref({
-  diamond: true,
-  gold: true,
-  silver: true,
-  bronze: true
-});
-
-function toggleExpand(type) {
-  expandedTypes.value[type] = !expandedTypes.value[type];
-}
-
-// 按类型分组的奖励
-const groupedRewards = computed(() => {
-  return {
-    diamond: rewards.value.filter(r => r.cost.type === 'diamond'),
-    gold: rewards.value.filter(r => r.cost.type === 'gold'),
-    silver: rewards.value.filter(r => r.cost.type === 'silver'),
-    bronze: rewards.value.filter(r => r.cost.type === 'bronze')
-  };
-});
-
-// 监听类型变化，自动设置默认数量
-watch(() => newReward.value.cost.type, (newType) => {
-  if (!editingReward.value) {
-    newReward.value.cost.amount = defaultAmounts[newType];
-  }
-}, { deep: false });
-
-// 添加奖励
-async function addReward() {
-  if (!newReward.value.title) {
-    showMessage('请填写奖励标题');
-    return;
-  }
-
-  try {
-    const reward = {
-      title: newReward.value.title,
-      description: newReward.value.description || '',
-      cost: {
-        type: newReward.value.cost.type,
-        amount: newReward.value.cost.amount
-      }
-    };
-
-    // 添加到数据库
-    const id = await db.rewards.add(reward);
-    rewards.value.push({ ...reward, id });
-
-    // 重置表单
-    newReward.value = {
-      title: '',
-      description: '',
-      cost: {
-        type: newReward.value.cost.type,
-        amount: defaultAmounts[newReward.value.cost.type]
-      }
-    };
-    showMessage('奖励添加成功');
-  } catch (error) {
-    console.error('Failed to add reward:', error);
-    showMessage('添加失败，请重试');
-  }
-}
-
-// 开始编辑
-function startEdit(reward) {
-  editingReward.value = reward.id;
-  newReward.value = {
-    title: reward.title,
-    description: reward.description,
-    cost: { ...reward.cost }
-  };
-}
-
-// 保存编辑
-async function saveEdit() {
-  if (!newReward.value.title) {
-    showMessage('请填写奖励标题');
-    return;
-  }
-
-  try {
-    const updatedReward = {
-      id: editingReward.value,
-      title: newReward.value.title,
-      description: newReward.value.description || '',
-      cost: {
-        type: newReward.value.cost.type,
-        amount: newReward.value.cost.amount
-      }
-    };
-
-    // 更新数据库
-    await db.rewards.put(updatedReward);
-
-    // 更新本地状态
-    const index = rewards.value.findIndex(r => r.id === editingReward.value);
-    if (index !== -1) {
-      rewards.value[index] = updatedReward;
-    }
-
-    editingReward.value = null;
-    // 重置表单
-    newReward.value = {
-      title: '',
-      description: '',
-      cost: {
-        type: 'diamond',
-        amount: defaultAmounts['diamond']
-      }
-    };
-    showMessage('奖励修改成功');
-  } catch (error) {
-    console.error('Failed to update reward:', error);
-    showMessage('修改失败，请重试');
-  }
-}
-
-// 取消编辑
-function cancelEdit() {
-  editingReward.value = null;
-  // 重置表单
-  newReward.value = {
-    title: '',
-    description: '',
-    cost: {
-      type: 'diamond',
-      amount: defaultAmounts['diamond']
-    }
-  };
-}
-
-// 删除奖励
-async function deleteReward(rewardId) {
-  try {
-    // 从数据库删除
-    await db.rewards.delete(rewardId);
-    
-    // 更新本地状态
-    const index = rewards.value.findIndex(r => r.id === rewardId);
-    if (index !== -1) {
-      rewards.value.splice(index, 1);
-      showMessage('奖励删除成功');
-    }
-  } catch (error) {
-    console.error('Failed to delete reward:', error);
-    showMessage('删除失败，请重试');
-  }
-}
-
-// 消息提示
-const message = ref('');
-function showMessage(msg) {
-  message.value = msg;
-  setTimeout(() => {
-    message.value = '';
-  }, 2000);
-}
-
-function getTypeName(type) {
-  const names = {
-    diamond: '钻石卡皮巴拉',
-    gold: '黄金卡皮巴拉',
-    silver: '白银卡皮巴拉',
-    bronze: '青铜卡皮巴拉'
-  };
-  return names[type] || type;
-}
-</script>
-
 <template>
   <div class="reward-editor">
     <div v-if="message" class="message">{{ message }}</div>
     
-    <form @submit.prevent="editingReward ? saveEdit() : addReward()" class="reward-form">
-      <input 
-        v-model="newReward.title"
-        type="text"
-        placeholder="奖励标题"
-        class="input-field"
-      >
-      <textarea 
-        v-model="newReward.description"
-        placeholder="奖励描述（选填）"
-        class="input-field"
-      ></textarea>
-      <div class="cost-group">
-        <select 
-          v-model="newReward.cost.type"
-          class="select-field"
-        >
-          <option value="diamond">钻石卡皮巴拉</option>
-          <option value="gold">黄金卡皮巴拉</option>
-          <option value="silver">白银卡皮巴拉</option>
-          <option value="bronze">青铜卡皮巴拉</option>
-        </select>
+    <!-- 添加/编辑表单 -->
+    <div class="reward-form">
+      <h2>{{ editingReward ? '编辑奖励' : '添加新奖励' }}</h2>
+      <div class="form-group">
         <input 
-          type="number"
-          v-model.number="newReward.cost.amount"
-          min="1"
+          type="text" 
+          v-model="newReward.title" 
+          placeholder="奖励标题"
           class="input-field"
-          placeholder="数量"
         >
-      </div>
-      <div class="button-group">
-        <button type="submit" class="submit-btn">
-          {{ editingReward ? '保存修改' : '添加奖励' }}
-        </button>
-        <button 
-          v-if="editingReward"
-          type="button"
-          class="cancel-btn"
-          @click="cancelEdit"
-        >
-          取消
-        </button>
-      </div>
-    </form>
-
-    <div class="rewards-list">
-      <div v-for="(rewards, type) in groupedRewards" :key="type">
-        <div class="type-header" @click="toggleExpand(type)">
-          <h2>
-            {{ getTypeName(type) }}奖励 
-            <span class="reward-count">({{ rewards.length }})</span>
-          </h2>
-          <span class="expand-icon">{{ expandedTypes[type] ? '▼' : '▶' }}</span>
+        <textarea 
+          v-model="newReward.description"
+          placeholder="奖励描述（选填）"
+          class="input-field"
+          rows="3"
+        ></textarea>
+        <div class="cost-group">
+          <select v-model="newReward.cost.type" class="input-field">
+            <option value="bronze">青铜卡皮巴拉</option>
+            <option value="silver">白银卡皮巴拉</option>
+            <option value="gold">黄金卡皮巴拉</option>
+            <option value="diamond">钻石卡皮巴拉</option>
+          </select>
+          <input 
+            type="number" 
+            v-model.number="newReward.cost.amount"
+            min="1"
+            class="input-field cost-amount"
+          >
         </div>
-        <div v-show="expandedTypes[type]">
-          <div v-for="reward in rewards" 
+        <div class="button-group">
+          <button 
+            v-if="!editingReward" 
+            @click="addReward" 
+            class="add-btn"
+          >
+            添加奖励
+          </button>
+          <template v-else>
+            <button @click="saveEdit" class="save-btn">保存</button>
+            <button @click="cancelEdit" class="cancel-btn">取消</button>
+          </template>
+        </div>
+      </div>
+    </div>
+
+    <!-- 修改奖励列表部分 -->
+    <div class="rewards-list">
+      <div v-for="(rewards, type) in rewardsByType" 
+           :key="type" 
+           class="reward-group">
+        <div class="group-header" 
+             :class="type"
+             @click="toggleExpand(type)">
+          <div class="header-content">
+            <h3>{{ getTypeName(type) }}</h3>
+            <span class="reward-stats">
+              ({{ rewards.length }})
+            </span>
+          </div>
+          <span class="toggle-icon">{{ expandedTypes[type] ? '▼' : '▶' }}</span>
+        </div>
+        
+        <div class="reward-items" v-show="expandedTypes[type]">
+          <div v-if="!rewards.length" class="no-rewards">
+            暂无奖励
+          </div>
+          <div v-else
+               v-for="reward in rewards" 
                :key="reward.id" 
                class="reward-item"
-               :class="type">
+               :class="{ 'has-tooltip': reward.description }"
+               :data-tooltip="reward.description">
             <div class="reward-content">
-              <h3>{{ reward.title }}</h3>
-              <p v-if="reward.description" class="description">{{ reward.description }}</p>
-              <div class="cost">
-                需要 {{ reward.cost.amount }} 个
-                <span class="cost-type">{{ getTypeName(type) }}</span>
-              </div>
+              <span class="reward-title">{{ reward.title }}</span>
             </div>
             <div class="reward-actions">
-              <button class="edit-btn" @click="startEdit(reward)">编辑</button>
-              <button class="delete-btn" @click="deleteReward(reward.id)">删除</button>
+              <span class="cost-amount">{{ reward.cost.amount }}个</span>
+              <button @click="startEdit(reward)" class="edit-btn">编辑</button>
+              <button @click="deleteReward(reward.id)" class="delete-btn">删除</button>
             </div>
           </div>
         </div>
@@ -299,119 +93,222 @@ function getTypeName(type) {
 <style scoped>
 .reward-editor {
   padding: 20px;
+  max-width: 800px;
+  margin: 0 auto;
 }
 
 .reward-form {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-  margin-bottom: 24px;
   background: white;
   padding: 20px;
-  border-radius: 8px;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  border-radius: 12px;
+  margin-bottom: 20px;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.form-group {
+  display: grid;
+  gap: 12px;
+  margin-top: 16px;
+}
+
+.cost-group {
+  display: grid;
+  grid-template-columns: 2fr 1fr;
+  gap: 12px;
 }
 
 .input-field {
   padding: 8px 12px;
   border: 1px solid #ddd;
-  border-radius: 4px;
+  border-radius: 6px;
   font-size: 16px;
 }
 
-.select-field {
-  padding: 8px 12px;
-  border: 1px solid #ddd;
-  border-radius: 4px;
-  font-size: 16px;
-  background: white;
-}
-
-.cost-group {
-  display: flex;
-  gap: 12px;
-}
-
-.cost-group .input-field {
+.cost-amount {
   width: 100px;
 }
 
 .button-group {
   display: flex;
-  gap: 12px;
+  gap: 10px;
 }
 
-.submit-btn {
+.add-btn, .save-btn {
   background: #4CAF50;
   color: white;
+  padding: 10px 20px;
   border: none;
-  padding: 8px 16px;
-  border-radius: 4px;
+  border-radius: 6px;
   cursor: pointer;
+  font-size: 16px;
 }
 
 .cancel-btn {
   background: #9e9e9e;
   color: white;
+  padding: 10px 20px;
   border: none;
-  padding: 8px 16px;
-  border-radius: 4px;
+  border-radius: 6px;
   cursor: pointer;
+  font-size: 16px;
 }
 
 .rewards-list {
+  background: white;
+  border-radius: 12px;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+  overflow: hidden;
+}
+
+.reward-group {
+  background: white;
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+  margin-bottom: 15px;
+}
+
+.group-header {
   display: flex;
-  flex-direction: column;
-  gap: 24px;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 20px;
+  cursor: pointer;
+  transition: background-color 0.2s;
+  border-left: 4px solid transparent;
+}
+
+.group-header:hover {
+  background-color: #f5f5f5;
+}
+
+.group-header.diamond { border-left-color: #b9f2ff; }
+.group-header.gold { border-left-color: #ffd700; }
+.group-header.silver { border-left-color: #808080; }
+.group-header.bronze { border-left-color: #cd7f32; }
+
+.header-content {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.header-content h3 {
+  font-size: 1.2em;
+  margin: 0;
+  font-weight: 500;
+}
+
+.reward-stats {
+  color: #666;
+  font-size: 1em;
+}
+
+.reward-items {
+  border-top: 1px solid #eee;
 }
 
 .reward-item {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  background: white;
-  padding: 16px;
-  border-radius: 8px;
-  margin-bottom: 12px;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  padding: 12px 20px;
+  border-bottom: 1px solid #eee;
+  transition: background-color 0.2s;
 }
 
-.reward-item.diamond { border-left: 4px solid #00bcd4; }
-.reward-item.gold { border-left: 4px solid #ffd700; }
-.reward-item.silver { border-left: 4px solid #c0c0c0; }
-.reward-item.bronze { border-left: 4px solid #cd7f32; }
+.reward-item:last-child {
+  border-bottom: none;
+}
 
-.description {
+.reward-item:hover {
+  background-color: #f9f9f9;
+}
+
+.reward-title {
+  font-size: 1.1em;
+  color: #333;
+}
+
+.reward-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.cost-amount {
   color: #666;
-  margin: 8px 0;
+  font-size: 0.95em;
 }
 
-.cost {
-  color: #888;
+.edit-btn, .delete-btn {
+  padding: 6px 12px;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
   font-size: 0.9em;
-}
-
-.cost-type {
-  font-weight: 500;
+  transition: all 0.2s;
+  color: white;
 }
 
 .edit-btn {
   background: #2196F3;
-  color: white;
-  border: none;
-  padding: 8px 16px;
-  border-radius: 4px;
-  cursor: pointer;
-  margin-right: 8px;
 }
 
 .delete-btn {
   background: #f44336;
+}
+
+.edit-btn:hover, .delete-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 2px 4px rgba(0,0,0,0.15);
+}
+
+.no-rewards {
+  text-align: center;
+  padding: 20px;
+  color: #666;
+}
+
+/* 工具提示 */
+.has-tooltip {
+  position: relative;
+}
+
+.has-tooltip:hover::after {
+  content: attr(data-tooltip);
+  position: absolute;
+  left: 0;
+  top: 100%;
+  margin-top: 5px;
+  background: rgba(0, 0, 0, 0.8);
   color: white;
-  border: none;
-  padding: 8px 16px;
-  border-radius: 4px;
-  cursor: pointer;
+  padding: 8px 12px;
+  border-radius: 6px;
+  font-size: 0.9em;
+  white-space: pre-wrap;
+  max-width: 250px;
+  z-index: 1000;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+}
+
+@media (max-width: 768px) {
+  .reward-item {
+    padding: 10px 15px;
+  }
+  
+  .reward-title {
+    font-size: 1em;
+  }
+  
+  .reward-actions {
+    gap: 8px;
+  }
+  
+  .edit-btn, .delete-btn {
+    padding: 4px 8px;
+    font-size: 0.85em;
+  }
 }
 
 .message {
@@ -425,32 +322,158 @@ function getTypeName(type) {
   border-radius: 5px;
   z-index: 1000;
 }
-
-.type-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 12px;
-  background: white;
-  border-radius: 8px;
-  margin-bottom: 12px;
-  cursor: pointer;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-}
-
-.type-header:hover {
-  background: #f5f5f5;
-}
-
-.expand-icon {
-  font-size: 1.2em;
-  color: #666;
-}
-
-.reward-count {
-  font-size: 0.8em;
-  color: #666;
-  margin-left: 8px;
-  font-weight: normal;
-}
 </style> 
+
+<script setup>
+import { ref, onMounted, computed } from 'vue';
+import { api } from '../api/client';
+
+// 响应式状态
+const rewards = ref([]);
+const message = ref('');
+const editingReward = ref(null);
+const newReward = ref({
+  title: '',
+  description: '',
+  cost: {
+    type: 'bronze',
+    amount: 1
+  }
+});
+
+// 添加折叠状态管理
+const expandedTypes = ref({
+  bronze: true,
+  silver: true,
+  gold: true,
+  diamond: true
+});
+
+// 按类型分组的奖励
+const rewardsByType = computed(() => {
+  const result = {
+    diamond: [],
+    gold: [],
+    silver: [],
+    bronze: []
+  };
+  
+  rewards.value.forEach(reward => {
+    if (result[reward.cost.type]) {
+      result[reward.cost.type].push(reward);
+    }
+  });
+  
+  return result;
+});
+
+// 获取类型名称
+function getTypeName(type) {
+  const names = {
+    diamond: '钻石卡皮巴拉',
+    gold: '黄金卡皮巴拉',
+    silver: '白银卡皮巴拉',
+    bronze: '青铜卡皮巴拉'
+  };
+  return names[type] || type;
+}
+
+// 切换折叠状态
+function toggleExpand(type) {
+  expandedTypes.value[type] = !expandedTypes.value[type];
+}
+
+// 加载奖励列表
+async function loadRewards() {
+  try {
+    const data = await api.getRewards();
+    rewards.value = data;
+  } catch (error) {
+    console.error('Failed to load rewards:', error);
+    showMessage('加载奖励失败');
+  }
+}
+
+// 添加奖励
+async function addReward() {
+  if (!newReward.value.title) {
+    showMessage('请填写奖励标题');
+    return;
+  }
+
+  try {
+    await api.createReward(newReward.value);
+    await loadRewards();
+    resetForm();
+    showMessage('奖励添加成功');
+  } catch (error) {
+    console.error('Failed to add reward:', error);
+    showMessage('添加奖励失败');
+  }
+}
+
+// 开始编辑
+function startEdit(reward) {
+  editingReward.value = reward.id;
+  newReward.value = {
+    ...reward,
+    cost: { ...reward.cost }
+  };
+}
+
+// 保存编辑
+async function saveEdit() {
+  try {
+    await api.updateReward(editingReward.value, newReward.value);
+    await loadRewards();
+    cancelEdit();
+    showMessage('奖励更新成功');
+  } catch (error) {
+    console.error('Failed to update reward:', error);
+    showMessage('更新奖励失败');
+  }
+}
+
+// 取消编辑
+function cancelEdit() {
+  editingReward.value = null;
+  resetForm();
+}
+
+// 删除奖励
+async function deleteReward(rewardId) {
+  try {
+    await api.deleteReward(rewardId);
+    await loadRewards();
+    showMessage('奖励删除成功');
+  } catch (error) {
+    console.error('Failed to delete reward:', error);
+    showMessage('删除奖励失败');
+  }
+}
+
+// 重置表单
+function resetForm() {
+  newReward.value = {
+    title: '',
+    description: '',
+    cost: {
+      type: 'bronze',
+      amount: 1
+    }
+  };
+}
+
+// 显示消息
+function showMessage(text) {
+  message.value = text;
+  setTimeout(() => {
+    message.value = '';
+  }, 3000);
+}
+
+// 组件挂载时加载数据
+onMounted(() => {
+  loadRewards();
+});
+</script> 

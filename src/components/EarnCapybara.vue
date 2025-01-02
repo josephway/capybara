@@ -40,27 +40,46 @@
     </div>
 
     <div class="task-list">
-      <div v-for="task in filteredTasks" 
-           :key="task.id" 
-           class="task-item"
-           :class="{ 'has-tooltip': task.description }"
-           :data-tooltip="task.description"
-           :data-reward="task.reward.type">
-        <div class="task-content">
-          <input
-            type="checkbox"
-            :checked="task.completed"
-            @change="toggleTask(task)"
-          >
-          <div class="task-text">
-            <span :class="{ completed: task.completed }">
-              {{ task.title }}
-            </span>
+      <div v-if="Object.values(tasksByType).every(tasks => tasks.length === 0)" 
+           class="no-tasks">
+        当天没有任务
+      </div>
+      <div v-else
+           v-for="(tasks, type) in tasksByType" 
+           :key="type" 
+           class="tasks-section"
+           :class="type">
+        <div class="type-header" @click="toggleExpand(type)">
+          <div class="header-content">
+            <h3>{{ getTypeName(type) }}</h3>
+            <span class="task-count">({{ tasks.length }})</span>
           </div>
+          <span class="toggle-icon">{{ expandedTypes[type] ? '▼' : '▶' }}</span>
         </div>
-        <div class="task-reward">
-          奖励: {{ task.reward.amount }} 个
-          <span :class="task.reward.type">{{ task.reward.type }}</span>
+        
+        <div v-show="expandedTypes[type]" class="tasks-group">
+          <div v-for="task in tasks" 
+               :key="task.id" 
+               class="task-item"
+               :class="{ 'has-tooltip': task.description }"
+               :data-tooltip="task.description">
+            <div class="task-content">
+              <input
+                type="checkbox"
+                :checked="task.completed"
+                @change="toggleTask(task)"
+              >
+              <div class="task-text">
+                <span :class="{ completed: task.completed }">
+                  {{ task.title }}
+                </span>
+              </div>
+            </div>
+            <div class="task-reward">
+              奖励: {{ task.reward.amount }} 个
+              <span :class="task.reward.type">{{ getTypeName(task.reward.type) }}</span>
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -68,13 +87,17 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, watch } from 'vue';
-import { db } from '../db';
+import { ref, computed, onMounted } from 'vue';
+import { api } from '../api/client';
 
-const tasks = ref([]);
-const currentDate = ref(new Date().toISOString().split('T')[0]);
-const today = new Date().toISOString().split('T')[0];
+const props = defineProps({
+  capybaras: Object
+});
+
 const emit = defineEmits(['reward-earned']);
+const currentDate = ref(new Date().toISOString().split('T')[0]);
+const tasks = ref([]);
+const message = ref('');
 
 // 计算当前周的日期
 const weekDays = computed(() => {
@@ -98,39 +121,73 @@ const weekDays = computed(() => {
   return days;
 });
 
-// 检查日期是否有任务
+// 检查指定日期是否有任务
 function hasTaskOnDate(date) {
   const dayTasks = tasks.value.filter(task => task.date === date);
   if (dayTasks.length === 0) return false;
   
-  // 返回该日期任务的所有类型
+  // 返回该日期所有任务的奖励类型（去重）
   return [...new Set(dayTasks.map(task => task.reward.type))];
 }
 
-// 过滤当前日期的任务
-const filteredTasks = computed(() => {
+// 获取指定日期的任务
+const tasksForDate = computed(() => {
+  console.log('Computing tasks for date:', currentDate.value);
+  console.log('Available tasks:', tasks.value);
   return tasks.value.filter(task => task.date === currentDate.value);
 });
-
-// 加载任务数据
-async function loadTasks() {
-  try {
-    const dbTasks = await db.tasks.toArray();
-    tasks.value = dbTasks;
-  } catch (error) {
-    console.error('Failed to load tasks:', error);
-  }
-}
 
 // 更新任务状态
 async function toggleTask(task) {
   try {
-    const newCompleted = !task.completed;
-    await db.tasks.update(task.id, { completed: newCompleted });
-    task.completed = newCompleted;
-    emit('reward-earned', task.reward, newCompleted);
+    const updatedTask = {
+      ...task,
+      completed: !task.completed
+    };
+
+    await api.updateTask(task.id, updatedTask);
+    
+    // 添加日志
+    console.log('Task toggle:', {
+      taskId: task.id,
+      wasCompleted: task.completed,
+      nowCompleted: updatedTask.completed,
+      reward: task.reward
+    });
+
+    // 更新任务状态时同时处理奖励
+    if (updatedTask.completed) {
+      // 完成任务时增加奖励
+      console.log('Adding reward:', task.reward);
+      emit('reward-earned', task.reward);
+    } else {
+      // 取消完成时减少奖励
+      const negativeReward = {
+        type: task.reward.type,
+        amount: -task.reward.amount
+      };
+      console.log('Removing reward:', negativeReward);
+      emit('reward-earned', negativeReward);
+    }
+    
+    await loadTasks();
   } catch (error) {
     console.error('Failed to update task:', error);
+    showMessage('更新任务状态失败');
+  }
+}
+
+// 加载任务
+async function loadTasks() {
+  try {
+    console.log('Loading tasks in EarnCapybara...');
+    const allTasks = await api.getTasks();
+    console.log('Loaded tasks:', allTasks);
+    tasks.value = allTasks || [];
+  } catch (error) {
+    console.error('Failed to load tasks:', error);
+    showMessage('加载任务失败');
+    tasks.value = [];
   }
 }
 
@@ -146,12 +203,60 @@ function changeWeek(offset) {
   currentDate.value = date.toISOString().split('T')[0];
 }
 
-// 监听日期变化
-watch(currentDate, () => {
-  // 可以在这里添加日期变化时的额外逻辑
+// 获取类型名称
+function getTypeName(type) {
+  const names = {
+    diamond: '钻石卡皮巴拉',
+    gold: '黄金卡皮巴拉',
+    silver: '白银卡皮巴拉',
+    bronze: '青铜卡皮巴拉'
+  };
+  return names[type] || type;
+}
+
+function showMessage(text) {
+  message.value = text;
+  setTimeout(() => {
+    message.value = '';
+  }, 3000);
+}
+
+// 添加 filteredTasks 计算属性
+const filteredTasks = computed(() => {
+  return tasks.value.filter(task => task.date === currentDate.value);
 });
 
-// 组件挂载时加载数据
+// 添加折叠状态管理
+const expandedTypes = ref({
+  diamond: true,
+  gold: true,
+  silver: true,
+  bronze: true
+});
+
+// 按类型分组的任务
+const tasksByType = computed(() => {
+  const groups = {
+    diamond: [],
+    gold: [],
+    silver: [],
+    bronze: []
+  };
+  
+  filteredTasks.value.forEach(task => {
+    if (groups[task.reward.type]) {
+      groups[task.reward.type].push(task);
+    }
+  });
+  
+  return groups;
+});
+
+// 切换折叠状态
+function toggleExpand(type) {
+  expandedTypes.value[type] = !expandedTypes.value[type];
+}
+
 onMounted(() => {
   loadTasks();
 });
@@ -419,4 +524,77 @@ onMounted(() => {
   border-top-color: rgba(0, 0, 0, 0.8);
   pointer-events: none;
 }
+
+/* 添加无任务提示的样式 */
+.no-tasks {
+  text-align: center;
+  padding: 20px;
+  color: #666;
+  background: white;
+  border-radius: 12px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+}
+
+/* 添加新的分组样式 */
+.tasks-section {
+  margin-bottom: 20px;
+  background: white;
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+}
+
+.type-header {
+  padding: 15px 20px;
+  cursor: pointer;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: #f8fafc;
+  border-bottom: 1px solid #edf2f7;
+}
+
+.header-content {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.header-content h3 {
+  margin: 0;
+  font-size: 1.1em;
+  color: #2d3748;
+}
+
+.task-count {
+  color: #718096;
+  font-size: 0.9em;
+}
+
+.toggle-icon {
+  color: #718096;
+  font-size: 0.9em;
+}
+
+.tasks-group {
+  padding: 10px;
+  animation: slideDown 0.3s ease-out;
+}
+
+@keyframes slideDown {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* 类型特定的样式 */
+.tasks-section.diamond .type-header { border-left: 4px solid #b9f2ff; }
+.tasks-section.gold .type-header { border-left: 4px solid #ffd700; }
+.tasks-section.silver .type-header { border-left: 4px solid #808080; }
+.tasks-section.bronze .type-header { border-left: 4px solid #cd7f32; }
 </style> 

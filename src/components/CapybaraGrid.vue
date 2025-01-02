@@ -73,26 +73,85 @@
 </template>
 
 <script setup>
-import { ref } from 'vue';
-import { db } from '../db';
+import { ref, computed } from 'vue';
+import { api } from '../api/client';
 
 const props = defineProps({
-  capybaras: {
-    type: Object,
-    required: true
-  }
+  capybaras: Object
 });
 
 const emit = defineEmits(['update:capybaras']);
-
-// 显示提示信息
 const message = ref('');
-const showMessage = (msg) => {
-  message.value = msg;
-  setTimeout(() => {
-    message.value = '';
-  }, 2000);
-};
+
+// 更新数量
+async function updateAmount(type, delta) {
+  const newAmount = Math.max(0, props.capybaras[type] + delta);
+  const newCapybaras = { ...props.capybaras, [type]: newAmount };
+  
+  try {
+    await api.request('capybaras', {
+      method: 'PUT',
+      body: JSON.stringify(newCapybaras)
+    });
+    emit('update:capybaras', newCapybaras);
+  } catch (error) {
+    console.error('Failed to update amount:', error);
+    showMessage('更新失败，请重试');
+  }
+}
+
+// 向下兑换
+async function exchange(fromType, toType) {
+  if (props.capybaras[fromType] < 1) {
+    showMessage(`${getTypeName(fromType)}数量不足`);
+    return;
+  }
+
+  const newCapybaras = { ...props.capybaras };
+  newCapybaras[fromType] -= 1;
+  newCapybaras[toType] += 10;
+
+  try {
+    await api.request('capybaras', {
+      method: 'PUT',
+      body: JSON.stringify(newCapybaras)
+    });
+    emit('update:capybaras', newCapybaras);
+    showMessage(`成功将1个${getTypeName(fromType)}兑换为10个${getTypeName(toType)}`);
+  } catch (error) {
+    console.error('Failed to exchange:', error);
+    showMessage('兑换失败，请重试');
+  }
+}
+
+// 向上兑换
+async function exchangeUp(fromType, toType) {
+  if (props.capybaras[fromType] < 10) {
+    showMessage(`${getTypeName(fromType)}数量不足，需要10个`);
+    return;
+  }
+
+  const newCapybaras = { ...props.capybaras };
+  newCapybaras[fromType] -= 10;
+  newCapybaras[toType] += 1;
+
+  try {
+    await api.request('capybaras', {
+      method: 'PUT',
+      body: JSON.stringify(newCapybaras)
+    });
+    emit('update:capybaras', newCapybaras);
+    showMessage(`成功将10个${getTypeName(fromType)}兑换为1个${getTypeName(toType)}`);
+  } catch (error) {
+    console.error('Failed to exchange up:', error);
+    showMessage('兑换失败，请重试');
+  }
+}
+
+// 计算总数
+const total = computed(() => {
+  return Object.values(props.capybaras).reduce((sum, amount) => sum + amount, 0);
+});
 
 // 获取类型名称
 function getTypeName(type) {
@@ -102,73 +161,15 @@ function getTypeName(type) {
     silver: '白银卡皮巴拉',
     bronze: '青铜卡皮巴拉'
   };
-  return names[type];
+  return names[type] || type;
 }
 
-// 手动更新数量
-async function updateAmount(type, delta) {
-  const newAmount = Math.max(0, props.capybaras[type] + delta);
-  try {
-    // 先更新数据库
-    await db.capybaras.put({ type, amount: newAmount });
-    // 再更新本地状态
-    const newCapybaras = { ...props.capybaras };
-    newCapybaras[type] = newAmount;
-    emit('update:capybaras', newCapybaras);
-  } catch (error) {
-    console.error('Update failed:', error);
-    showMessage('更新失败，请重试');
-  }
-}
-
-// 向上升级
-async function exchangeUp(from, to) {
-  if (props.capybaras[from] >= 10) {
-    try {
-      const newCapybaras = { ...props.capybaras };
-      newCapybaras[from] -= 10;
-      newCapybaras[to] += 1;
-
-      // 同时更新两种类型的数据
-      await Promise.all([
-        db.capybaras.put({ type: from, amount: newCapybaras[from] }),
-        db.capybaras.put({ type: to, amount: newCapybaras[to] })
-      ]);
-      
-      emit('update:capybaras', newCapybaras);
-      showMessage(`成功将 10 个${getTypeName(from)}升级为 1 个${getTypeName(to)}`);
-    } catch (error) {
-      console.error('Exchange up failed:', error);
-      showMessage('升级失败，请重试');
-    }
-  } else {
-    showMessage(`需要 10 个${getTypeName(from)}才能升级`);
-  }
-}
-
-// 向下兑换
-async function exchange(from, to) {
-  if (props.capybaras[from] >= 1) {
-    try {
-      const newCapybaras = { ...props.capybaras };
-      newCapybaras[from] -= 1;
-      newCapybaras[to] += 10;
-
-      // 同时更新两种类型的数据
-      await Promise.all([
-        db.capybaras.put({ type: from, amount: newCapybaras[from] }),
-        db.capybaras.put({ type: to, amount: newCapybaras[to] })
-      ]);
-      
-      emit('update:capybaras', newCapybaras);
-      showMessage(`成功将 1 个${getTypeName(from)}兑换为 10 个${getTypeName(to)}`);
-    } catch (error) {
-      console.error('Exchange down failed:', error);
-      showMessage('兑换失败，请重试');
-    }
-  } else {
-    showMessage(`${getTypeName(from)}数量不足，无法兑换`);
-  }
+// 显示消息
+function showMessage(text) {
+  message.value = text;
+  setTimeout(() => {
+    message.value = '';
+  }, 3000);
 }
 </script>
 
