@@ -43,6 +43,8 @@
       <div v-for="task in filteredTasks" 
            :key="task.id" 
            class="task-item"
+           :class="{ 'has-tooltip': task.description }"
+           :data-tooltip="task.description"
            :data-reward="task.reward.type">
         <div class="task-content">
           <input
@@ -54,9 +56,6 @@
             <span :class="{ completed: task.completed }">
               {{ task.title }}
             </span>
-            <div class="task-description" v-if="task.description">
-              {{ task.description }}
-            </div>
           </div>
         </div>
         <div class="task-reward">
@@ -160,9 +159,9 @@ onMounted(() => {
 
 <style scoped>
 .earn-capybara {
-  padding: 30px;
-  background: #f5f7fa;
-  min-height: 100%;
+  padding: 20px;
+  max-width: 800px;
+  margin: 0 auto;
 }
 
 /* 响应式设计 */
@@ -203,11 +202,10 @@ onMounted(() => {
 
 .calendar {
   background: white;
-  border-radius: 16px;
-  padding: 25px;
-  box-shadow: 0 10px 20px rgba(0, 0, 0, 0.1);
-  max-width: 800px;
-  margin: 0 auto 30px;
+  border-radius: 12px;
+  padding: 20px;
+  margin-bottom: 20px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
 }
 
 .calendar-header {
@@ -389,5 +387,36 @@ onMounted(() => {
   font-size: 0.9em;
   color: #666;
   margin-left: 2px;
+}
+
+.has-tooltip {
+  position: relative;
+}
+
+.has-tooltip:hover::after {
+  content: attr(data-tooltip);
+  position: absolute;
+  left: 0;
+  bottom: 100%;
+  margin-bottom: 5px;
+  background: rgba(0, 0, 0, 0.8);
+  color: white;
+  padding: 8px 12px;
+  border-radius: 4px;
+  font-size: 0.9em;
+  white-space: pre-wrap;
+  max-width: 300px;
+  z-index: 1000;
+  pointer-events: none;
+}
+
+.has-tooltip:hover::before {
+  content: '';
+  position: absolute;
+  left: 20px;
+  bottom: 100%;
+  border: 5px solid transparent;
+  border-top-color: rgba(0, 0, 0, 0.8);
+  pointer-events: none;
 }
 </style> 

@@ -1,17 +1,21 @@
 <template>
   <div class="app">
-    <Sidebar v-model:currentView="currentView" />
-    <main>
-      <CapybaraGrid 
-        v-if="currentView === 'honor'" 
-        :capybaras="capybaras" 
-        @update:capybaras="updateCapybaras"
+    <header class="app-header">
+      <h1>Joanne的卡皮巴拉</h1>
+    </header>
+    <div class="app-content">
+      <Sidebar 
+        :currentView="currentView"
+        @update:currentView="handleViewChange"
       />
-      <EarnCapybara v-if="currentView === 'earn'" @reward-earned="handleRewardEarned" />
-      <SpendCapybara v-if="currentView === 'spend'" :capybaras="capybaras" />
-      <TaskEditor v-if="currentView === 'task-editor'" />
-      <RewardEditor v-if="currentView === 'reward-editor'" />
-    </main>
+      <main>
+        <component 
+          :is="currentComponent"
+          v-model:capybaras="capybaras"
+          @reward-earned="handleRewardEarned"
+        />
+      </main>
+    </div>
   </div>
 </template>
 
@@ -22,7 +26,7 @@ import EarnCapybara from './components/EarnCapybara.vue';
 import TaskEditor from './components/TaskEditor.vue';
 import SpendCapybara from './components/SpendCapybara.vue';
 import RewardEditor from './components/RewardEditor.vue';
-import { ref, onMounted } from 'vue';
+import { ref, computed, onMounted } from 'vue';
 import { db } from './db';
 
 const currentView = ref('honor');
@@ -31,6 +35,18 @@ const capybaras = ref({
   gold: 0,
   silver: 0,
   bronze: 0
+});
+
+// 添加计算属性来确定当前显示的组件
+const currentComponent = computed(() => {
+  const components = {
+    honor: CapybaraGrid,
+    earn: EarnCapybara,
+    spend: SpendCapybara,
+    'task-editor': TaskEditor,
+    'reward-editor': RewardEditor
+  };
+  return components[currentView.value];
 });
 
 // 加载卡皮巴拉数据
@@ -98,8 +114,29 @@ function handleViewChange(view) {
 <style>
 .app {
   display: flex;
+  flex-direction: column;
   min-height: 100vh;
   overflow-x: hidden;
+}
+
+.app-header {
+  background: #1976d2;
+  color: white;
+  padding: 10px 20px;
+  text-align: center;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  z-index: 1;
+}
+
+.app-header h1 {
+  margin: 0;
+  font-size: 1.5em;
+}
+
+.app-content {
+  display: flex;
+  flex: 1;
+  overflow: hidden;
 }
 
 main {
@@ -107,11 +144,19 @@ main {
   padding: 20px;
   overflow-y: auto;
   width: 100%;
+  display: flex;
+  justify-content: center;
+}
+
+main > * {
+  width: 100%;
+  max-width: 800px;
+  margin: 0 auto;
 }
 
 /* 响应式设计 */
 @media (max-width: 768px) {
-  .app {
+  .app-content {
     flex-direction: column;
   }
 

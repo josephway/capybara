@@ -177,7 +177,6 @@ async function exchange(from, to) {
   padding: 20px;
   position: relative;
   width: 100%;
-  background: #f5f7fa;
   box-sizing: border-box;
 }
 

@@ -10,5 +10,25 @@ db.version(1).stores({
     rewards: '++id, title, description, cost'
 });
 
+// 初始化默认数据
+async function initDefaults() {
+    const capybaraCount = await db.capybaras.count();
+
+    if (capybaraCount === 0) {
+        // 初始化卡皮巴拉数据
+        await db.capybaras.bulkPut([
+            { type: 'diamond', amount: 0 },
+            { type: 'gold', amount: 0 },
+            { type: 'silver', amount: 0 },
+            { type: 'bronze', amount: 0 }
+        ]);
+    }
+}
+
+// 初始化数据库
+initDefaults().catch(err => {
+    console.error('Failed to initialize database:', err);
+});
+
 // 导出数据库实例
 export { db }; 

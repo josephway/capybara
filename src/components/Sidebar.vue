@@ -66,11 +66,21 @@ function switchView(view) {
 .logo {
   padding: 0 20px 20px;
   text-align: center;
+  display: flex;
+  justify-content: center;
+  align-items: center;
 }
 
 .logo img {
-  width: 60px;
-  height: 60px;
+  width: 80px;
+  height: 80px;
+  border-radius: 50%;
+  object-fit: cover;
+  padding: 5px;
+  background: white;
+  box-sizing: border-box;
+  display: block;
+  flex-shrink: 0;
 }
 
 nav {
@@ -116,8 +126,11 @@ nav button.active {
   }
 
   .logo img {
-    width: 40px;
-    height: 40px;
+    width: 50px;
+    height: 50px;
+    border-radius: 50%;
+    object-fit: cover;
+    flex-shrink: 0;
   }
 
   nav {

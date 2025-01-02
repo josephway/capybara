@@ -43,6 +43,7 @@ async function addTask() {
   
   const baseTask = {
     title: newTask.value.title,
+    description: newTask.value.description || '',
     reward: { ...newTask.value.reward },
     completed: false,
     repeat: newTask.value.repeat
@@ -98,7 +99,20 @@ async function addTask() {
     }));
     
     tasks.value = [...tasks.value, ...newTasks];
-    newTask.value.title = '';
+    
+    // 重置表单
+    newTask.value = {
+      title: '',
+      description: '',
+      date: new Date().toISOString().split('T')[0],
+      reward: {
+        type: 'bronze',
+        amount: 1
+      },
+      repeat: 'none',
+      completed: false
+    };
+    
     showMessage('任务添加成功');
   } catch (error) {
     console.error('Failed to add tasks:', error);
@@ -354,6 +368,12 @@ async function deleteTaskGroup(task) {
           placeholder="任务标题"
           class="input-field"
         >
+        <textarea 
+          v-model="newTask.description"
+          placeholder="任务描述（选填）"
+          class="input-field"
+          rows="3"
+        ></textarea>
         <div class="date-repeat-group">
           <input 
             type="date" 
@@ -391,12 +411,13 @@ async function deleteTaskGroup(task) {
       <div v-for="task in uniqueTasks" 
            :key="task.id" 
            class="task-item"
-           :class="{ 'recurring-task': task.repeat !== 'none' }">
+           :class="{ 
+             'recurring-task': task.repeat !== 'none',
+             'has-tooltip': task.description 
+           }"
+           :data-tooltip="task.description">
         <div class="task-info">
           <span class="task-title">{{ task.title }}</span>
-          <div class="task-description" v-if="task.description">
-            {{ task.description }}
-          </div>
           <div class="task-details">
             <span class="task-date" v-if="task.repeat === 'none'">
               {{ task.date }}
@@ -599,5 +620,43 @@ textarea {
     width: 100%;
     justify-content: flex-end;
   }
+}
+
+textarea.input-field {
+  width: 100%;
+  resize: vertical;
+  min-height: 80px;
+  font-family: inherit;
+}
+
+.has-tooltip {
+  position: relative;
+}
+
+.has-tooltip:hover::after {
+  content: attr(data-tooltip);
+  position: absolute;
+  left: 0;
+  top: -10px;
+  transform: translateY(-100%);
+  background: rgba(0, 0, 0, 0.9);
+  color: white;
+  padding: 8px 12px;
+  border-radius: 4px;
+  font-size: 0.9em;
+  white-space: pre-wrap;
+  max-width: 300px;
+  z-index: 1000;
+  pointer-events: none;
+}
+
+.has-tooltip:hover::before {
+  content: '';
+  position: absolute;
+  left: 20px;
+  top: -10px;
+  border: 5px solid transparent;
+  border-top-color: rgba(0, 0, 0, 0.9);
+  pointer-events: none;
 }
 </style> 
