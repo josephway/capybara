@@ -1,18 +1,25 @@
 <script setup>
-import { ref, computed, watch } from 'vue';
+import { ref, computed, watch, onMounted } from 'vue';
+import { db } from '../db';
 
-// 从 localStorage 加载奖励列表
-const savedRewards = localStorage.getItem('rewards');
-const rewards = ref(savedRewards ? JSON.parse(savedRewards) : [
-  // 使用 SpendCapybara.vue 中的初始奖励数据
-  {
-    id: 1,
-    title: '额外的游戏时间（30分钟）',
-    description: '在今天获得额外的30分钟游戏时间',
-    cost: { type: 'bronze', amount: 5 }
-  },
-  // ... 其他奖励
-]);
+// 从数据库加载奖励列表
+const rewards = ref([]);
+
+// 加载奖励数据
+async function loadRewards() {
+  try {
+    const savedRewards = await db.rewards.toArray();
+    rewards.value = savedRewards;
+  } catch (error) {
+    console.error('Failed to load rewards:', error);
+    rewards.value = [];
+  }
+}
+
+// 组件挂载时加载数据
+onMounted(() => {
+  loadRewards();
+});
 
 // 默认数量映射
 const defaultAmounts = {
@@ -64,49 +71,41 @@ watch(() => newReward.value.cost.type, (newType) => {
   }
 }, { deep: false });
 
-// 保存到 localStorage
-watch(rewards, (newValue) => {
-  localStorage.setItem('rewards', JSON.stringify(newValue));
-}, { deep: true });
-
-// 获取类型名称
-function getTypeName(type) {
-  const names = {
-    diamond: '钻石卡皮巴拉',
-    gold: '黄金卡皮巴拉',
-    silver: '白银卡皮巴拉',
-    bronze: '青铜卡皮巴拉'
-  };
-  return names[type];
-}
-
 // 添加奖励
-function addReward() {
+async function addReward() {
   if (!newReward.value.title) {
     showMessage('请填写奖励标题');
     return;
   }
 
-  rewards.value.push({
-    id: Date.now(),
-    title: newReward.value.title,
-    description: newReward.value.description || '',
-    cost: {
-      type: newReward.value.cost.type,
-      amount: newReward.value.cost.amount
-    }
-  });
+  try {
+    const reward = {
+      title: newReward.value.title,
+      description: newReward.value.description || '',
+      cost: {
+        type: newReward.value.cost.type,
+        amount: newReward.value.cost.amount
+      }
+    };
 
-  // 重置表单
-  newReward.value = {
-    title: '',
-    description: '',
-    cost: {
-      type: newReward.value.cost.type,
-      amount: defaultAmounts[newReward.value.cost.type]
-    }
-  };
-  showMessage('奖励添加成功');
+    // 添加到数据库
+    const id = await db.rewards.add(reward);
+    rewards.value.push({ ...reward, id });
+
+    // 重置表单
+    newReward.value = {
+      title: '',
+      description: '',
+      cost: {
+        type: newReward.value.cost.type,
+        amount: defaultAmounts[newReward.value.cost.type]
+      }
+    };
+    showMessage('奖励添加成功');
+  } catch (error) {
+    console.error('Failed to add reward:', error);
+    showMessage('添加失败，请重试');
+  }
 }
 
 // 开始编辑
@@ -120,15 +119,14 @@ function startEdit(reward) {
 }
 
 // 保存编辑
-function saveEdit() {
+async function saveEdit() {
   if (!newReward.value.title) {
     showMessage('请填写奖励标题');
     return;
   }
 
-  const index = rewards.value.findIndex(r => r.id === editingReward.value);
-  if (index !== -1) {
-    rewards.value[index] = {
+  try {
+    const updatedReward = {
       id: editingReward.value,
       title: newReward.value.title,
       description: newReward.value.description || '',
@@ -137,6 +135,16 @@ function saveEdit() {
         amount: newReward.value.cost.amount
       }
     };
+
+    // 更新数据库
+    await db.rewards.put(updatedReward);
+
+    // 更新本地状态
+    const index = rewards.value.findIndex(r => r.id === editingReward.value);
+    if (index !== -1) {
+      rewards.value[index] = updatedReward;
+    }
+
     editingReward.value = null;
     // 重置表单
     newReward.value = {
@@ -148,6 +156,9 @@ function saveEdit() {
       }
     };
     showMessage('奖励修改成功');
+  } catch (error) {
+    console.error('Failed to update reward:', error);
+    showMessage('修改失败，请重试');
   }
 }
 
@@ -166,11 +177,20 @@ function cancelEdit() {
 }
 
 // 删除奖励
-function deleteReward(rewardId) {
-  const index = rewards.value.findIndex(r => r.id === rewardId);
-  if (index !== -1) {
-    rewards.value.splice(index, 1);
-    showMessage('奖励删除成功');
+async function deleteReward(rewardId) {
+  try {
+    // 从数据库删除
+    await db.rewards.delete(rewardId);
+    
+    // 更新本地状态
+    const index = rewards.value.findIndex(r => r.id === rewardId);
+    if (index !== -1) {
+      rewards.value.splice(index, 1);
+      showMessage('奖励删除成功');
+    }
+  } catch (error) {
+    console.error('Failed to delete reward:', error);
+    showMessage('删除失败，请重试');
   }
 }
 
@@ -181,6 +201,16 @@ function showMessage(msg) {
   setTimeout(() => {
     message.value = '';
   }, 2000);
+}
+
+function getTypeName(type) {
+  const names = {
+    diamond: '钻石卡皮巴拉',
+    gold: '黄金卡皮巴拉',
+    silver: '白银卡皮巴拉',
+    bronze: '青铜卡皮巴拉'
+  };
+  return names[type] || type;
 }
 </script>
 
@@ -236,7 +266,10 @@ function showMessage(msg) {
     <div class="rewards-list">
       <div v-for="(rewards, type) in groupedRewards" :key="type">
         <div class="type-header" @click="toggleExpand(type)">
-          <h2>{{ getTypeName(type) }}奖励</h2>
+          <h2>
+            {{ getTypeName(type) }}奖励 
+            <span class="reward-count">({{ rewards.length }})</span>
+          </h2>
           <span class="expand-icon">{{ expandedTypes[type] ? '▼' : '▶' }}</span>
         </div>
         <div v-show="expandedTypes[type]">
@@ -412,5 +445,12 @@ function showMessage(msg) {
 .expand-icon {
   font-size: 1.2em;
   color: #666;
+}
+
+.reward-count {
+  font-size: 0.8em;
+  color: #666;
+  margin-left: 8px;
+  font-weight: normal;
 }
 </style> 

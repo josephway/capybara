@@ -57,59 +57,92 @@ function switchView(view) {
 .sidebar {
   width: 200px;
   background: white;
-  min-height: 100vh;
-  padding: 20px;
   box-shadow: 2px 0 5px rgba(0, 0, 0, 0.1);
-  position: sticky;
-  top: 0;
   display: flex;
   flex-direction: column;
+  padding: 20px 0;
 }
 
 .logo {
+  padding: 0 20px 20px;
   text-align: center;
-  margin-bottom: 30px;
 }
 
 .logo img {
-  width: 120px;
-  height: 120px;
-  object-fit: cover;
-  border-radius: 50%;
-  background: white;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  width: 60px;
+  height: 60px;
 }
 
 nav {
   display: flex;
   flex-direction: column;
   gap: 10px;
+  padding: 0 10px;
 }
 
-button {
+nav button {
   padding: 12px;
   border: none;
   border-radius: 8px;
-  background: #f5f5f5;
+  background: transparent;
   cursor: pointer;
-  font-size: 16px;
-  transition: all 0.3s ease;
+  font-size: 1em;
   text-align: left;
-  color: #666;
+  transition: all 0.2s;
 }
 
-button:hover {
-  background: #e0e0e0;
-  transform: translateX(5px);
+nav button:hover {
+  background: #f0f4f8;
 }
 
-button.active {
-  background: #ff6b6b;
-  color: white;
-  font-weight: bold;
+nav button.active {
+  background: #e3f2fd;
+  color: #1976d2;
+  font-weight: 500;
 }
 
-button.active:hover {
-  background: #ff5252;
+/* 响应式设计 */
+@media (max-width: 768px) {
+  .sidebar {
+    width: 100%;
+    padding: 10px;
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .logo {
+    padding: 0 10px;
+  }
+
+  .logo img {
+    width: 40px;
+    height: 40px;
+  }
+
+  nav {
+    flex-direction: row;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: 5px;
+    flex: 1;
+  }
+
+  nav button {
+    padding: 8px 12px;
+    font-size: 0.9em;
+  }
+}
+
+@media (max-width: 480px) {
+  .sidebar {
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  nav {
+    width: 100%;
+    justify-content: center;
+  }
 }
 </style>

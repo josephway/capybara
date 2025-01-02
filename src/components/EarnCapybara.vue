@@ -1,286 +1,213 @@
-<script setup>
-import { ref, computed, watch } from 'vue';
-
-// 当前选中的日期
-const selectedDate = ref(new Date('2024-12-23'));
-// 当前显示的周的起始日期
-const weekStartDate = ref(new Date('2024-12-23'));
-
-// 从 localStorage 加载任务状态
-const savedTasks = localStorage.getItem('tasks');
-const tasks = ref(savedTasks ? JSON.parse(savedTasks) : [
-  {
-    id: 1,
-    date: '2024-12-23',
-    title: '完成数学作业',
-    reward: { type: 'bronze', amount: 2 },
-    completed: false
-  },
-  {
-    id: 2,
-    date: '2024-12-23',
-    title: '整理房间',
-    reward: { type: 'bronze', amount: 3 },
-    completed: false
-  },
-  {
-    id: 3,
-    date: '2024-12-23',
-    title: '背诵古诗',
-    reward: { type: 'silver', amount: 1 },
-    completed: false
-  },
-  {
-    id: 4,
-    date: '2024-12-24',
-    title: '帮妈妈做家务',
-    reward: { type: 'silver', amount: 2 },
-    completed: false
-  },
-  {
-    id: 5,
-    date: '2024-12-24',
-    title: '练习钢琴30分钟',
-    reward: { type: 'gold', amount: 1 },
-    completed: false
-  },
-  {
-    id: 6,
-    date: '2024-12-25',
-    title: '英语口语练习',
-    reward: { type: 'bronze', amount: 2 },
-    completed: false
-  },
-  {
-    id: 7,
-    date: '2024-12-25',
-    title: '阅读一章故事书',
-    reward: { type: 'silver', amount: 1 },
-    completed: false
-  },
-  {
-    id: 8,
-    date: '2024-12-26',
-    title: '参加课外活动',
-    reward: { type: 'gold', amount: 1 },
-    completed: false
-  },
-  {
-    id: 9,
-    date: '2024-12-26',
-    title: '完成科学实验',
-    reward: { type: 'silver', amount: 2 },
-    completed: false
-  },
-  {
-    id: 10,
-    date: '2024-12-27',
-    title: '运动30分钟',
-    reward: { type: 'bronze', amount: 2 },
-    completed: false
-  },
-  {
-    id: 11,
-    date: '2024-12-27',
-    title: '期末考试得满分',
-    reward: { type: 'diamond', amount: 1 },
-    completed: false
-  },
-  {
-    id: 12,
-    date: '2024-12-28',
-    title: '写日记',
-    reward: { type: 'bronze', amount: 1 },
-    completed: false
-  },
-  {
-    id: 13,
-    date: '2024-12-28',
-    title: '画一幅圣诞画',
-    reward: { type: 'silver', amount: 1 },
-    completed: false
-  },
-  {
-    id: 14,
-    date: '2024-12-29',
-    title: '参加冬季才艺表演',
-    reward: { type: 'diamond', amount: 1 },
-    completed: false
-  },
-  {
-    id: 15,
-    date: '2024-12-29',
-    title: '和家人一起散步',
-    reward: { type: 'bronze', amount: 2 },
-    completed: false
-  }
-]);
-
-// 保存任务状态到 localStorage
-watch(tasks, (newValue) => {
-  localStorage.setItem('tasks', JSON.stringify(newValue));
-}, { deep: true });
-
-// 获取周的起始日期
-function getWeekStartDate(date) {
-  const d = new Date(date);
-  const day = d.getDay();
-  const diff = d.getDate() - day + (day === 0 ? -6 : 1);
-  return new Date(d.setDate(diff));
-}
-
-// 计算当前周的日期数组
-const weekDates = computed(() => {
-  const dates = [];
-  const currentDate = new Date(weekStartDate.value);
-  for (let i = 0; i < 7; i++) {
-    dates.push(new Date(currentDate));
-    currentDate.setDate(currentDate.getDate() + 1);
-  }
-  return dates;
-});
-
-// 切换到上一周
-function previousWeek() {
-  const newDate = new Date(weekStartDate.value);
-  newDate.setDate(newDate.getDate() - 7);
-  weekStartDate.value = newDate;
-}
-
-// 切换到下一周
-function nextWeek() {
-  const newDate = new Date(weekStartDate.value);
-  newDate.setDate(newDate.getDate() + 7);
-  weekStartDate.value = newDate;
-}
-
-// 选择日期
-function selectDate(date) {
-  selectedDate.value = date;
-}
-
-// 获取日期对应的任务
-const selectedDateTasks = computed(() => {
-  const dateStr = selectedDate.value.toISOString().split('T')[0];
-  return tasks.value.filter(task => task.date === dateStr);
-});
-
-const emit = defineEmits(['reward-earned']);
-
-// 完成任务
-function completeTask(taskId) {
-  const task = tasks.value.find(t => t.id === taskId);
-  if (!task) return;
-  
-  // 切换任务状态
-  task.completed = !task.completed;
-  
-  // 发送奖励变更事件，包含完成状态
-  emit('reward-earned', task.reward, task.completed);
-  
-  // 显示相应消息
-  if (task.completed) {
-    showMessage(`完成任务！获得 ${task.reward.amount} 个${getTypeName(task.reward.type)}`);
-  } else {
-    showMessage(`取消完成任务，减少 ${task.reward.amount} 个${getTypeName(task.reward.type)}`);
-  }
-  
-  // 保存到 localStorage
-  localStorage.setItem('tasks', JSON.stringify(tasks.value));
-}
-
-// 添加获取类型名称函数
-function getTypeName(type) {
-  const names = {
-    diamond: '钻石卡皮巴拉',
-    gold: '黄金卡皮巴拉',
-    silver: '白银卡皮巴拉',
-    bronze: '青铜卡皮巴拉'
-  };
-  return names[type];
-}
-
-// 添加消息提示
-const message = ref('');
-function showMessage(msg) {
-  message.value = msg;
-  setTimeout(() => {
-    message.value = '';
-  }, 2000);
-}
-
-// 处理日期选择
-function handleDateSelect(event) {
-  const selectedDate = new Date(event.target.value);
-  selectDate(selectedDate);
-  weekStartDate.value = getWeekStartDate(selectedDate);
-}
-</script>
-
 <template>
-  <div class="earn-container">
-    <!-- 周历视图 -->
+  <div class="earn-capybara">
     <div class="calendar">
       <div class="calendar-header">
-        <button @click="previousWeek">&lt;</button>
-        <input 
-          type="date" 
-          :value="selectedDate.toISOString().split('T')[0]"
-          @change="handleDateSelect"
-          class="date-picker"
-        >
-        <button @click="nextWeek">&gt;</button>
+        <button @click="changeWeek(-1)">上一周</button>
+        <div class="date-selector">
+          <input 
+            type="date" 
+            v-model="currentDate"
+            :min="'2024-01-01'"
+            :max="'2024-12-31'"
+          >
+        </div>
+        <button @click="changeWeek(1)">下一周</button>
       </div>
-      <div class="calendar-grid">
-        <div v-for="date in weekDates" 
-             :key="date.toISOString()"
-             :class="['calendar-day', {
-               'selected': selectedDate.toDateString() === date.toDateString(),
-               'today': new Date().toDateString() === date.toDateString()
-             }]"
-             @click="selectDate(date)">
-          <div class="day-name">{{ date.toLocaleDateString('zh-CN', { weekday: 'short' }) }}</div>
-          <div class="day-number">{{ date.getDate() }}</div>
+      <div class="weekdays">
+        <div v-for="day in ['日', '一', '二', '三', '四', '五', '六']" :key="day">
+          {{ day }}
+        </div>
+      </div>
+      <div class="days">
+        <div v-for="day in weekDays" 
+             :key="day.date" 
+             class="day"
+             :class="{ 
+               'selected': day.date === currentDate,
+               'today': day.date === today
+             }"
+             @click="selectDate(day.date)">
+          <span class="date-number">{{ new Date(day.date).getDate() }}</span>
+          <div class="task-indicators" v-if="day.hasTask">
+            <div v-for="type in day.taskTypes" 
+                 :key="type"
+                 class="task-indicator"
+                 :class="type">
+            </div>
+          </div>
         </div>
       </div>
     </div>
 
-    <!-- 任务列表 -->
-    <div class="tasks-container">
-      <h3>{{ selectedDate.toLocaleDateString() }} 的任务</h3>
-      <div class="tasks-list">
-        <div v-for="task in selectedDateTasks" 
-             :key="task.id"
-             :class="['task-item', { completed: task.completed }]">
-          <label :class="task.reward.type">
-            <input type="checkbox" 
-                   :checked="task.completed"
-                   @change="completeTask(task.id)">
-            <span class="task-title">{{ task.title }}</span>
-            <span class="task-reward">
-              {{ task.reward.amount }} {{ getTypeName(task.reward.type) }}
+    <div class="task-list">
+      <div v-for="task in filteredTasks" 
+           :key="task.id" 
+           class="task-item"
+           :data-reward="task.reward.type">
+        <div class="task-content">
+          <input
+            type="checkbox"
+            :checked="task.completed"
+            @change="toggleTask(task)"
+          >
+          <div class="task-text">
+            <span :class="{ completed: task.completed }">
+              {{ task.title }}
             </span>
-          </label>
+            <div class="task-description" v-if="task.description">
+              {{ task.description }}
+            </div>
+          </div>
+        </div>
+        <div class="task-reward">
+          奖励: {{ task.reward.amount }} 个
+          <span :class="task.reward.type">{{ task.reward.type }}</span>
         </div>
       </div>
     </div>
   </div>
-
-  <!-- 添加消息提示组件 -->
-  <div class="message" v-if="message">{{ message }}</div>
 </template>
 
+<script setup>
+import { ref, computed, onMounted, watch } from 'vue';
+import { db } from '../db';
+
+const tasks = ref([]);
+const currentDate = ref(new Date().toISOString().split('T')[0]);
+const today = new Date().toISOString().split('T')[0];
+const emit = defineEmits(['reward-earned']);
+
+// 计算当前周的日期
+const weekDays = computed(() => {
+  const days = [];
+  const current = new Date(currentDate.value);
+  const firstDayOfWeek = new Date(current);
+  firstDayOfWeek.setDate(current.getDate() - current.getDay());
+
+  for (let i = 0; i < 7; i++) {
+    const date = new Date(firstDayOfWeek);
+    date.setDate(firstDayOfWeek.getDate() + i);
+    const dateStr = date.toISOString().split('T')[0];
+    const taskTypes = hasTaskOnDate(dateStr);
+    days.push({
+      date: dateStr,
+      hasTask: taskTypes,
+      taskTypes: taskTypes
+    });
+  }
+  
+  return days;
+});
+
+// 检查日期是否有任务
+function hasTaskOnDate(date) {
+  const dayTasks = tasks.value.filter(task => task.date === date);
+  if (dayTasks.length === 0) return false;
+  
+  // 返回该日期任务的所有类型
+  return [...new Set(dayTasks.map(task => task.reward.type))];
+}
+
+// 过滤当前日期的任务
+const filteredTasks = computed(() => {
+  return tasks.value.filter(task => task.date === currentDate.value);
+});
+
+// 加载任务数据
+async function loadTasks() {
+  try {
+    const dbTasks = await db.tasks.toArray();
+    tasks.value = dbTasks;
+  } catch (error) {
+    console.error('Failed to load tasks:', error);
+  }
+}
+
+// 更新任务状态
+async function toggleTask(task) {
+  try {
+    const newCompleted = !task.completed;
+    await db.tasks.update(task.id, { completed: newCompleted });
+    task.completed = newCompleted;
+    emit('reward-earned', task.reward, newCompleted);
+  } catch (error) {
+    console.error('Failed to update task:', error);
+  }
+}
+
+// 选择日期
+function selectDate(date) {
+  currentDate.value = date;
+}
+
+// 切换周
+function changeWeek(offset) {
+  const date = new Date(currentDate.value);
+  date.setDate(date.getDate() + (offset * 7));
+  currentDate.value = date.toISOString().split('T')[0];
+}
+
+// 监听日期变化
+watch(currentDate, () => {
+  // 可以在这里添加日期变化时的额外逻辑
+});
+
+// 组件挂载时加载数据
+onMounted(() => {
+  loadTasks();
+});
+</script>
+
 <style scoped>
-.earn-container {
-  padding: 20px;
+.earn-capybara {
+  padding: 30px;
+  background: #f5f7fa;
+  min-height: 100%;
+}
+
+/* 响应式设计 */
+@media (max-width: 768px) {
+  .earn-capybara {
+    padding: 15px;
+  }
+
+  .calendar {
+    padding: 15px;
+  }
+
+  .weekdays {
+    font-size: 0.9em;
+  }
+
+  .day {
+    font-size: 1em;
+  }
+
+  .task-item {
+    padding: 15px;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 10px;
+  }
+
+  .task-content {
+    font-size: 1em;
+  }
+
+  .task-reward {
+    font-size: 0.9em;
+    width: 100%;
+    justify-content: flex-end;
+  }
 }
 
 .calendar {
   background: white;
-  border-radius: 12px;
-  padding: 20px;
-  margin-bottom: 20px;
-  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+  border-radius: 16px;
+  padding: 25px;
+  box-shadow: 0 10px 20px rgba(0, 0, 0, 0.1);
+  max-width: 800px;
+  margin: 0 auto 30px;
 }
 
 .calendar-header {
@@ -288,145 +215,179 @@ function handleDateSelect(event) {
   justify-content: space-between;
   align-items: center;
   margin-bottom: 20px;
-  gap: 12px;
 }
 
-.calendar-grid {
+.calendar-header button {
+  padding: 10px 20px;
+  border: none;
+  border-radius: 8px;
+  background: #f0f4f8;
+  color: #2196f3;
+  font-size: 1.1em;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.calendar-header button:hover {
+  background: #e3f2fd;
+  transform: translateY(-2px);
+}
+
+.date-selector input {
+  padding: 10px 15px;
+  border: 2px solid #e3f2fd;
+  border-radius: 8px;
+  font-size: 1.1em;
+  color: #2196f3;
+  cursor: pointer;
+}
+
+.weekdays {
   display: grid;
   grid-template-columns: repeat(7, 1fr);
-  gap: 10px;
+  text-align: center;
+  font-weight: 600;
+  font-size: 1.1em;
+  color: #666;
+  margin-bottom: 15px;
+  padding: 10px 0;
+  border-bottom: 2px solid #f0f4f8;
 }
 
-.calendar-day {
+.days {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 8px;
+}
+
+.day {
   aspect-ratio: 1;
-  padding: 10px;
-  border-radius: 8px;
-  cursor: pointer;
   display: flex;
   flex-direction: column;
-  align-items: center;
   justify-content: center;
-  border: 1px solid #eee;
-}
-
-.calendar-day:hover {
-  background: #f5f5f5;
-}
-
-.calendar-day.selected {
-  background: #e3f2fd;
-  border-color: #2196F3;
-}
-
-.calendar-day.today {
-  border-color: #4CAF50;
-  font-weight: bold;
-}
-
-.tasks-container {
-  background: white;
+  align-items: center;
+  font-size: 1.2em;
+  font-weight: 500;
   border-radius: 12px;
-  padding: 20px;
-  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  position: relative;
+  border: 2px solid transparent;
+}
+
+.day:hover {
+  background: #f8fafc;
+  transform: translateY(-2px);
+}
+
+.day.selected {
+  background: #e3f2fd;
+  border-color: #2196f3;
+  color: #1976d2;
+}
+
+.day.today {
+  font-weight: 700;
+  color: #2196f3;
+}
+
+.task-indicator {
+  width: 6px;
+  height: 6px;
+  background: #2196f3;
+  border-radius: 50%;
+  margin-top: 4px;
+}
+
+/* 任务列表样式 */
+.task-list {
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+  max-width: 800px;
+  margin: 0 auto;
 }
 
 .task-item {
-  padding: 12px;
-  border-bottom: 1px solid #eee;
-  transition: all 0.3s ease;
+  background: white;
+  border-radius: 12px;
+  padding: 20px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+  transition: all 0.2s ease;
+  border-left: 4px solid #2196f3;
 }
 
 .task-item:hover {
-  background: #f5f5f5;
+  transform: translateX(5px);
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.1);
 }
 
-.task-item label {
+.task-content {
   display: flex;
   align-items: center;
-  gap: 12px;
-  cursor: pointer;
-  width: 100%;
+  gap: 15px;
+  font-size: 1.2em;
 }
 
-.task-item input[type="checkbox"] {
-  width: 20px;
-  height: 20px;
+.task-content input[type="checkbox"] {
+  width: 22px;
+  height: 22px;
   cursor: pointer;
 }
 
-.task-item.completed .task-title {
+.completed {
   text-decoration: line-through;
-  color: #999;
+  color: #9e9e9e;
 }
 
 .task-reward {
-  margin-left: auto;
-  padding: 4px 8px;
-  border-radius: 4px;
-  background: #f0f0f0;
+  font-size: 1.1em;
+  color: #666;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* 奖励类型颜色 */
+.bronze { 
+  color: #cd7f32;
+  font-weight: 600;
+}
+
+.silver { 
+  color: #808080;
+  font-weight: 600;
+}
+
+.gold { 
+  color: #ffd700;
+  font-weight: 600;
+}
+
+.diamond { 
+  color: #b9f2ff;
+  font-weight: 600;
+}
+
+/* 根据奖励类型设置任务边框颜色 */
+.task-item[data-reward="bronze"] { border-left-color: #cd7f32; }
+.task-item[data-reward="silver"] { border-left-color: #808080; }
+.task-item[data-reward="gold"] { border-left-color: #ffd700; }
+.task-item[data-reward="diamond"] { border-left-color: #b9f2ff; }
+
+.task-text {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.task-description {
   font-size: 0.9em;
-}
-
-/* 任务奖励类型颜色 */
-.diamond .task-reward { 
-  background: #e3f2fd;
-  color: #00bcd4;
-}
-
-.gold .task-reward { 
-  background: #fff8e1;
-  color: #ffa000;
-}
-
-.silver .task-reward { 
-  background: #f5f5f5;
-  color: #757575;
-}
-
-.bronze .task-reward { 
-  background: #fff3e0;
-  color: #ef6c00;
-}
-
-/* 添加消息样式 */
-.message {
-  position: fixed;
-  top: 20px;
-  left: 50%;
-  transform: translateX(-50%);
-  background-color: rgba(0, 0, 0, 0.8);
-  color: white;
-  padding: 10px 20px;
-  border-radius: 5px;
-  z-index: 1000;
-  animation: fadeInOut 2s ease-in-out;
-}
-
-@keyframes fadeInOut {
-  0% { opacity: 0; }
-  10% { opacity: 1; }
-  90% { opacity: 1; }
-  100% { opacity: 0; }
-}
-
-.date-picker {
-  padding: 8px 12px;
-  border: 1px solid #ddd;
-  border-radius: 6px;
-  font-size: 16px;
-  color: #333;
-  cursor: pointer;
-  flex: 1;
-  max-width: 200px;
-}
-
-.date-picker:hover {
-  border-color: #2196F3;
-}
-
-.date-picker:focus {
-  outline: none;
-  border-color: #2196F3;
-  box-shadow: 0 0 0 2px rgba(33, 150, 243, 0.2);
+  color: #666;
+  margin-left: 2px;
 }
 </style> 

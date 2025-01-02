@@ -1,5 +1,6 @@
 <script setup>
-import { ref, computed } from 'vue';
+import { ref, computed, onMounted } from 'vue';
+import { db } from '../db';
 
 const props = defineProps({
   capybaras: {
@@ -10,9 +11,18 @@ const props = defineProps({
 
 const emit = defineEmits(['update:capybaras']);
 
-// 从 localStorage 加载奖励列表
-const savedRewards = localStorage.getItem('rewards');
-const rewards = ref(savedRewards ? JSON.parse(savedRewards) : []);
+// 从数据库加载奖励列表
+const rewards = ref([]);
+
+onMounted(async () => {
+  try {
+    const savedRewards = await db.rewards.toArray();
+    rewards.value = savedRewards;
+  } catch (error) {
+    console.error('Failed to load rewards:', error);
+    rewards.value = [];
+  }
+});
 
 // 按类型分组的奖励
 const groupedRewards = computed(() => {
@@ -36,13 +46,25 @@ function getTypeName(type) {
 }
 
 // 兑换奖励
-function exchangeReward(reward) {
+async function exchangeReward(reward) {
   const { type, amount } = reward.cost;
   if (props.capybaras[type] >= amount) {
-    const newCapybaras = { ...props.capybaras };
-    newCapybaras[type] -= amount;
-    emit('update:capybaras', newCapybaras);
-    showMessage(`成功兑换：${reward.title}`);
+    try {
+      const newAmount = props.capybaras[type] - amount;
+      
+      // 更新数据库
+      await db.capybaras.put({ type, amount: newAmount });
+      
+      // 更新本地状态
+      const newCapybaras = { ...props.capybaras };
+      newCapybaras[type] = newAmount;
+      emit('update:capybaras', newCapybaras);
+      
+      showMessage(`成功兑换：${reward.title}`);
+    } catch (error) {
+      console.error('Exchange failed:', error);
+      showMessage('兑换失败，请重试');
+    }
   } else {
     showMessage(`${getTypeName(type)}不足，无法兑换`);
   }
@@ -68,6 +90,20 @@ const expandedTypes = ref({
 function toggleExpand(type) {
   expandedTypes.value[type] = !expandedTypes.value[type];
 }
+
+// 计算可兑换的奖励数量（去重）
+function getAvailableCount(rewards) {
+  // 使用 Set 来存储可兑换奖励的标题，确保每个奖励只计算一次
+  const availableTitles = new Set();
+  
+  rewards.forEach(reward => {
+    if (props.capybaras[reward.cost.type] >= reward.cost.amount) {
+      availableTitles.add(reward.title);
+    }
+  });
+  
+  return availableTitles.size;
+}
 </script>
 
 <template>
@@ -76,7 +112,12 @@ function toggleExpand(type) {
          :key="type" 
          class="rewards-section">
       <div class="type-header" @click="toggleExpand(type)">
-        <h2>{{ getTypeName(type) }}奖励</h2>
+        <h2>
+          {{ getTypeName(type) }}商店 
+          <span class="reward-count">
+            ({{ getAvailableCount(rewards) }}/{{ rewards.length }})
+          </span>
+        </h2>
         <span class="expand-icon">{{ expandedTypes[type] ? '▼' : '▶' }}</span>
       </div>
       <div v-show="expandedTypes[type]" class="rewards-grid">
@@ -121,12 +162,12 @@ function toggleExpand(type) {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 20px;
-  padding: 12px 20px;
+  padding: 12px;
   background: white;
   border-radius: 8px;
+  margin-bottom: 12px;
   cursor: pointer;
-  transition: background-color 0.2s;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
 }
 
 .type-header:hover {
@@ -219,5 +260,12 @@ function toggleExpand(type) {
   .rewards-grid {
     grid-template-columns: 1fr;
   }
+}
+
+.reward-count {
+  font-size: 0.8em;
+  color: #666;
+  margin-left: 8px;
+  font-weight: normal;
 }
 </style> 
